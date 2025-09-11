@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users
+model User {
+  id          String  @id @default(uuid())
+  email       String  @unique
+  firebaseUid String? @unique
+  name        String?
+
+  givenName         String?
+  surname           String?
+  userPrincipalName String?
+
+  jobTitle       String?
+  department     String?
+  officeLocation String?
+
+  fileId String?
+
+  active         Boolean      @default(false)
+  follow         Boolean      @default(false)
+  externalActive Boolean      @default(false)
+  phone          String?      @unique
+  threadId       String?
+  firstAccess    Boolean      @default(false)
+  provider       AuthProvider @default(local)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  photo          File?              @relation(fields: [fileId], references: [id])
+  subscriptions  UserSubscription[]
+  emails         Email[]
+  chatHistory    ChatHistory[]
+  Invite         Invite[]
+  InviteAttendee InviteAttendee[]
+
+  @@map("users")
+}
+
+enum AuthProvider {
+  local
+  google
+  microsoft
+}
+
+model UserSubscription {
+  id             String               @id @default(uuid())
+  userId         String
+  provider       SubscriptionProvider
+  subscriptionId String?
+  active         Boolean              @default(true)
+  nextRenewalAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, provider])
+  @@map("user_subscriptions")
+}
+
+enum SubscriptionProvider {
+  email
+  teams
+  calendar
+  ondrive
+}
+
+// Files
+model File {
+  id        String @id @default(uuid())
+  name      String
+  extension String
+  baseUrl   String
+  folder    String
+  file      String
+  url       String @unique
+  size      Int
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  postId     String?
+  User       User[]
+  contractId String?
+  Contract   Contract? @relation(fields: [contractId], references: [id])
+
+  @@index([id, createdAt(sort: Desc)])
+  @@map("files")
+}
+
+model Contract {
+  id          String    @id @default(uuid())
+  companyName String
+  description String?
+  website     String?
+  startDate   DateTime
+  endDate     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  files File[]
+
+  @@map("contracts")
+}
+
+enum FileType {
+  IMAGE
+  DOCUMENT
+  VIDEO
+}
+
+// Emails
+model Email {
+  id               String    @id @default(uuid())
+  emailIdExternal  String    @unique @map("email_id_external")
+  userId           String?   @map("user_id")
+  subject          String
+  body             String
+  from             String    @map("from_email")
+  to               String[]  @map("to_emails")
+  isRead           Boolean   @default(false) @map("is_read")
+  isDraft          Boolean   @default(false) @map("is_draft")
+  flagged          Boolean   @default(false)
+  importance       String?
+  threadId         String?   @map("thread_id")
+  timestamp        DateTime? @map("timestamp")
+  webLink          String?   @map("web_link")
+  status           String    @default("open")
+  tags             String[]  @default([])
+  summary          String?
+  needsReply       Boolean?  @map("needs_reply")
+  type             String?
+  cleanText        String?   @map("clean_text")
+  detectedEntities String[]  @default([]) @map("detected_entities")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relação com User (opcional) com onDelete seguro
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("emails")
+}
+
+// Chat history
+model ChatHistory {
+  id         String     @id @default(uuid())
+  whatsappId String
+  message    String
+  timestamp  DateTime
+  origin     ChatOrigin
+  userId     String?
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("chat_history")
+}
+
+enum ChatOrigin {
+  user
+  donna
+}
+
+// Invites
+model Invite {
+  id String @id @default(uuid())
+
+  eventIdExternal String  @unique @map("event_id_external")
+  iCalUId         String? @unique @map("ical_uid")
+
+  // Básico do evento
+  subject String
+  status  InviteStatus @default(scheduled)
+
+  start         DateTime
+  end           DateTime
+  startTimeZone String?  @map("start_tz")
+  endTimeZone   String?  @map("end_tz")
+
+  // Local/online
+  locationName    String? @map("location_name")
+  locationAddress String? @map("location_address")
+  isOnlineMeeting Boolean @default(false) @map("is_online")
+  joinUrl         String?
+  webLink         String?
+
+  // Extra info
+  description String?
+
+  // Organizador (pode ser interno ou externo)
+  organizerUserId String? @map("organizer_user_id")
+  organizerName   String? @map("organizer_name")
+  organizerEmail  String? @map("organizer_email")
+  organizer       User?   @relation(fields: [organizerUserId], references: [id], onDelete: SetNull)
+
+  attendees InviteAttendee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([start, end])
+  @@index([organizerUserId])
+  @@map("invites")
+}
+
+// Invite Attendees
+model InviteAttendee {
+  id String @id @default(uuid())
+
+  inviteId String
+  invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  name  String?
+  email String?
+
+  // Tipo e resposta
+  type     InviteAttendeeType @default(required)
+  response InviteResponse     @default(none)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([inviteId, email])
+  @@index([inviteId])
+  @@index([email])
+  @@map("invite_attendees")
+}
+
+enum InviteStatus {
+  scheduled
+  updated
+  cancelled
+}
+
+enum InviteAttendeeType {
+  required
+  optional
+  resource
+}
+
+enum InviteResponse {
+  none
+  accepted
+  declined
+  tentative
+  organizer
+}

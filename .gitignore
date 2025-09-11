@@ -6,4 +6,4 @@
 /tmp
 /temp
 /cache
-/
+packages/*/dist
