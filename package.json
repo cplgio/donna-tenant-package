@@ -1,21 +1,17 @@
 {
   "name": "@donna/tenancy",
-  "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "private": false,
   "description": "Donna multi-tenant utilities",
-  "workspaces": [
-    "packages/*",
-    "examples/*"
-  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
   "scripts": {
-    "build": "npm -ws run build",
-    "dev": "npm -w examples/webhook-service run start:dev",
-    "test": "npm -ws run test",
-    "lint": "echo 'lint not configured'",
-    "clean": "rimraf node_modules packages/*/node_modules examples/*/node_modules packages/*/dist examples/*/dist || true"
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "@types/node": "^20.11.0"
   }
 }
