@@ -397,5 +397,5 @@ enum InviteResponse {
 npm run build
 ```
 
-> O pipeline usa [`tsup`](https://tsup.egoist.dev/) para gerar bundles ESM/CJS e declarações de tipos prontas para publicação.
+> O pipeline usa [`tsc`](https://www.typescriptlang.org/docs/) com projetos de build separados para gerar bundles ESM/CJS e declarações de tipos prontas para publicação.
 

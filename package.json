@@ -3,22 +3,25 @@
   "version": "1.0.2",
   "description": "Donna multi-tenant utilities",
   "private": false,
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "default": "./dist/index.js"
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
     },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.build.esm.json",
+    "build:cjs": "tsc -p tsconfig.build.cjs.json",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepare": "npm run build"
   },
   "peerDependencies": {
@@ -30,7 +33,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "tsup": "^8.0.1",
     "typescript": "^5.5.0"
   }
 }
