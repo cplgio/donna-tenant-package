@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "declaration": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": []
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["dist", "node_modules"]

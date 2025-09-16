@@ -84,3 +84,17 @@ declare module 'ioredis' {
     del(...keys: string[]): Promise<number>;
   }
 }
+
+// Node Globals
+declare namespace NodeJS {
+  interface ProcessEnv {
+    TENANT_PRISMA_CACHE_TTL_MS?: string;
+    TENANT_PRISMA_CACHE_MAX?: string;
+    TENANT_CACHE_TTL_SECONDS?: string;
+    [key: string]: string | undefined;
+  }
+}
+
+declare const process: {
+  env: NodeJS.ProcessEnv;
+};
