@@ -1,5 +1,5 @@
 {
-  "name": "@donna/monorepo",
+  "name": "@donna/tenancy",
   "private": true,
   "version": "0.1.0",
   "description": "Donna multi-tenant utilities (tenancy, webhook-utils, messaging) monorepo",
