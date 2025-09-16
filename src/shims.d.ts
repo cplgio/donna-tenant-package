@@ -64,7 +64,17 @@ declare module 'firebase-admin/firestore' {
 }
 
 declare namespace FirebaseFirestore {
-  type WhereFilterOp = '<' | '<=' | '==' | '!=' | '>=' | '>' | 'array-contains' | 'in' | 'array-contains-any' | 'not-in';
+  type WhereFilterOp =
+    | '<'
+    | '<='
+    | '=='
+    | '!='
+    | '>='
+    | '>'
+    | 'array-contains'
+    | 'in'
+    | 'array-contains-any'
+    | 'not-in';
 }
 
 declare module 'ioredis' {

@@ -8,6 +8,9 @@ Este repositório contém o módulo `@donna/tenancy` — conhecido como **aDonna
 npm install @donna/tenancy firebase-admin ioredis @prisma/client
 ```
 
+> O pacote já é publicado com builds ESM e CJS e definições de tipos. Após instalar as dependências acima (e as dependências do
+> NestJS, como `@nestjs/common` e `@nestjs/core`), nenhuma etapa adicional de configuração ou build é necessária.
+
 ## Uso
 
 ```typescript
@@ -391,7 +394,8 @@ enum InviteResponse {
 ## Testes
 
 ```bash
-npm test
 npm run build
 ```
+
+> O pipeline usa [`tsup`](https://tsup.egoist.dev/) para gerar bundles ESM/CJS e declarações de tipos prontas para publicação.
 

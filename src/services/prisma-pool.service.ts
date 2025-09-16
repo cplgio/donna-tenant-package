@@ -14,6 +14,7 @@ export class PrismaPoolService {
   private readonly ttlMs = parseInt(process.env.TENANT_PRISMA_CACHE_TTL_MS ?? '1800000', 10);
   private readonly max = parseInt(process.env.TENANT_PRISMA_CACHE_MAX ?? '20', 10);
 
+  // Services
   async getClient(key: string, url: string): Promise<PrismaClient> {
     await this.cleanupExpired();
     const now = Date.now();
@@ -46,6 +47,7 @@ export class PrismaPoolService {
     }
   }
 
+  // Utils
   private async cleanupExpired(): Promise<void> {
     const now = Date.now();
     for (const [key, entry] of this.pool.entries()) {
