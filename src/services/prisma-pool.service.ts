@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
+import { getPrismaCacheMax, getPrismaCacheTtlMs } from '../utils/env.util';
+
 interface PoolEntry {
   prisma: PrismaClient;
   expiresAt: number;
@@ -11,9 +13,7 @@ interface PoolEntry {
 export class PrismaPoolService {
   private readonly logger = new Logger(PrismaPoolService.name);
   private readonly pool = new Map<string, PoolEntry>();
-  private readonly ttlMs = parseInt(process.env.TENANT_PRISMA_CACHE_TTL_MS ?? '1800000', 10);
-  private readonly max = parseInt(process.env.TENANT_PRISMA_CACHE_MAX ?? '20', 10);
-
+  // Services
   async getClient(key: string, url: string): Promise<PrismaClient> {
     await this.cleanupExpired();
     const now = Date.now();
@@ -31,14 +31,16 @@ export class PrismaPoolService {
       this.pool.delete(key);
     }
     try {
+      const ttlMs = getPrismaCacheTtlMs();
+      const cacheLimit = getPrismaCacheMax();
       const prisma = new PrismaClient({ datasources: { db: { url } } });
       const entry: PoolEntry = {
         prisma,
-        expiresAt: now + this.ttlMs,
+        expiresAt: now + ttlMs,
         lastUsed: now,
       };
       this.pool.set(key, entry);
-      await this.enforceLimit();
+      await this.enforceLimit(cacheLimit);
       return prisma;
     } catch (err) {
       this.logger.error(`Failed to create Prisma client for ${key}`, err as Error);
@@ -46,6 +48,7 @@ export class PrismaPoolService {
     }
   }
 
+  // Utils
   private async cleanupExpired(): Promise<void> {
     const now = Date.now();
     for (const [key, entry] of this.pool.entries()) {
@@ -60,8 +63,8 @@ export class PrismaPoolService {
     }
   }
 
-  private async enforceLimit(): Promise<void> {
-    if (this.pool.size <= this.max) return;
+  private async enforceLimit(cacheLimit: number): Promise<void> {
+    if (this.pool.size <= cacheLimit) return;
     let lruKey: string | null = null;
     let lruTime = Infinity;
     for (const [key, entry] of this.pool.entries()) {

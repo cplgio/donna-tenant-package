@@ -1,5 +1,4 @@
 /node_modules
-/dist
 /build
 /coverage
 /logs
@@ -7,3 +6,4 @@
 /temp
 /cache
 packages/*/dist
+.env

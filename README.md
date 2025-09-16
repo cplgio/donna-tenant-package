@@ -8,6 +8,10 @@ Este repositório contém o módulo `@donna/tenancy` — conhecido como **aDonna
 npm install @donna/tenancy firebase-admin ioredis @prisma/client
 ```
 
+> O pacote já é publicado com bundle CommonJS e definições de tipos geradas via TypeScript. Após instalar as dependências acima
+> (e as dependências do NestJS, como `@nestjs/common` e `@nestjs/core`), nenhuma etapa adicional de configuração ou build é
+> necessária.
+
 ## Uso
 
 ```typescript
@@ -378,6 +382,9 @@ enum InviteResponse {
 
 ## Variáveis de Ambiente
 
+Todas as leituras de ambiente acontecem em tempo de execução usando o `process.env` da **sua aplicação**. Não defina variáveis
+de ambiente dentro da dependência; mantenha-as apenas no serviço consumidor.
+
 | Nome | Descrição |
 |------|-------------|
 | `REDIS_URL` | URL do Redis para cache de tenants (opcional, recomenda-se Redis em produção) |
@@ -391,7 +398,8 @@ enum InviteResponse {
 ## Testes
 
 ```bash
-npm test
 npm run build
 ```
+
+> O build utiliza apenas o `tsc` para gerar a pasta `dist/`, sem dependências extras.
 

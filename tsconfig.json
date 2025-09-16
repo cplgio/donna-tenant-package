@@ -1,12 +1,17 @@
 {
-  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "packages/tenancy/src",
+    "target": "ES2021",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2020"],
+    "rootDir": "src",
     "outDir": "dist",
-    "types": []
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
   },
-  "include": [
-    "packages/tenancy/src/**/*.ts",
-    "packages/tenancy/src/**/*.d.ts"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["dist", "node_modules"]
 }

@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Redis } from 'ioredis';
-import { TenantDoc } from '../types';
 
-const TENANT_CACHE_TTL_SECONDS = parseInt(process.env.TENANT_CACHE_TTL_SECONDS ?? '3600', 10);
+import { TenantDoc } from '../types';
+import { getTenantCacheTtlSeconds } from '../utils/env.util';
 
 // Utils
 const tenantKey = (tenantId: string) => `tenants:${tenantId}`;
@@ -39,7 +39,7 @@ export class TenantCacheService {
     }
   }
 
-  async setTenant(tenant: TenantDoc, ttlSeconds = TENANT_CACHE_TTL_SECONDS): Promise<void> {
+  async setTenant(tenant: TenantDoc, ttlSeconds = getTenantCacheTtlSeconds()): Promise<void> {
     this.tenantMemory.set(tenant.id, tenant);
     if (tenant.microsoft?.GRAPH_TENANT_ID) {
       this.workspaceMemory.set(tenant.microsoft.GRAPH_TENANT_ID, tenant.id);
