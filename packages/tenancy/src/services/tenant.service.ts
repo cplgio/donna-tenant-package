@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Firestore } from 'firebase-admin/firestore';
-import { PrismaClient } from '@prisma/client';
+import type { Firestore } from 'firebase-admin/firestore';
+import type { PrismaClient } from '@prisma/client';
 import { TenantCacheService } from './tenant-cache.service';
 import { PrismaPoolService } from './prisma-pool.service';
 import { ResolveInput, TenantDoc } from '../types';
