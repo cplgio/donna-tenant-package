@@ -1,14 +1,12 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2021",
-    "lib": ["ES2021"],
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "declaration": true,
+    "rootDir": "packages/tenancy/src",
     "outDir": "dist",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true
+    "types": []
   },
-  "include": ["src", "test"]
+  "include": [
+    "packages/tenancy/src/**/*.ts",
+    "packages/tenancy/src/**/*.d.ts"
+  ]
 }
