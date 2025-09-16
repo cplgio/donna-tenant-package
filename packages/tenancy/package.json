@@ -2,14 +2,26 @@
   "name": "@donna/tenancy",
   "version": "0.1.0",
   "description": "Tenant resolution (Firestore + Redis cache-aside) and Prisma pool with TTL/LRU for multi-tenant NestJS services.",
-  "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
   "sideEffects": false,
   "files": ["dist"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "clean": "node ./scripts/clean.js",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.build.json",
+    "build:cjs": "tsc -p tsconfig.build.cjs.json",
     "test": "echo 'no tests yet'"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "peerDependencies": {
     "@prisma/client": ">=5.0.0",
