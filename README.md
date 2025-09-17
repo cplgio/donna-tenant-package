@@ -83,6 +83,7 @@ try {
 ### TenantService
 - `getTenantById(tenantId: string): Promise<TenantDoc>`
 - `getTenantByWorkspaceId(workspaceTenantId: string): Promise<TenantDoc>`
+- `getWorkspaceByMicrosoft(microsoftTenantId: string): Promise<TenantDoc>`
 - `getPrismaFor(input: ResolveInput): Promise<PrismaClient>`
 - `getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }>`
 
