@@ -37,13 +37,20 @@ export class TenantService {
   }
 
   async getTenantByWorkspaceId(workspaceTenantId: string): Promise<TenantDoc> {
-    return this.getWorkspaceByMicrosoft(workspaceTenantId);
+    const { tenant } = await this.getWorkspaceByMicrosoft(workspaceTenantId);
+    return tenant;
   }
 
-  async getWorkspaceByMicrosoft(microsoftTenantId: string): Promise<TenantDoc> {
+  async getWorkspaceByMicrosoft(
+    microsoftTenantId: string,
+  ): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
       const cachedId = await this.cache.getTenantIdByWorkspace(microsoftTenantId);
-      if (cachedId) return await this.getTenantById(cachedId);
+      if (cachedId) {
+        const tenant = await this.getTenantById(cachedId);
+        const prisma = await this.getPrismaForTenant(tenant);
+        return { tenant, prisma };
+      }
 
       const snap = await this.firestore
         .collection('tenants')
@@ -56,7 +63,8 @@ export class TenantService {
       const doc = snap.docs[0];
       const tenant = { id: doc.id, ...(doc.data() as Omit<TenantDoc, 'id'>) };
       await this.cache.setTenant(tenant);
-      return tenant;
+      const prisma = await this.getPrismaForTenant(tenant);
+      return { tenant, prisma };
     } catch (err) {
       this.logger.error(
         `Failed to get workspace by Microsoft tenant id ${microsoftTenantId}`,
@@ -93,9 +101,7 @@ export class TenantService {
 
   async getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
-      const tenant = await this.getWorkspaceByMicrosoft(workspaceTenantId);
-      const prisma = await this.getPrismaForTenant(tenant);
-      return { prisma, tenant };
+      return await this.getWorkspaceByMicrosoft(workspaceTenantId);
     } catch (err) {
       this.logger.error(
         `Failed to get Prisma by workspace tenant id ${workspaceTenantId}`,
