@@ -1,3 +1,4 @@
+// Dependencies
 import { Injectable, Logger } from '@nestjs/common';
 import type { Firestore } from 'firebase-admin/firestore';
 import type { PrismaClient } from '@prisma/client';
@@ -36,17 +37,21 @@ export class TenantService {
   }
 
   async getTenantByWorkspaceId(workspaceTenantId: string): Promise<TenantDoc> {
+    return this.getWorkspaceByMicrosoft(workspaceTenantId);
+  }
+
+  async getWorkspaceByMicrosoft(microsoftTenantId: string): Promise<TenantDoc> {
     try {
-      const cachedId = await this.cache.getTenantIdByWorkspace(workspaceTenantId);
+      const cachedId = await this.cache.getTenantIdByWorkspace(microsoftTenantId);
       if (cachedId) return await this.getTenantById(cachedId);
 
       const snap = await this.firestore
         .collection('tenants')
-        .where('microsoft.GRAPH_TENANT_ID', '==', workspaceTenantId)
+        .where('microsoft.GRAPH_TENANT_ID', '==', microsoftTenantId)
         .limit(1)
         .get();
       if (snap.empty) {
-        throw new Error(`Tenant workspace ${workspaceTenantId} not found`);
+        throw new Error(`Tenant workspace ${microsoftTenantId} not found`);
       }
       const doc = snap.docs[0];
       const tenant = { id: doc.id, ...(doc.data() as Omit<TenantDoc, 'id'>) };
@@ -54,7 +59,7 @@ export class TenantService {
       return tenant;
     } catch (err) {
       this.logger.error(
-        `Failed to get tenant by workspace id ${workspaceTenantId}`,
+        `Failed to get workspace by Microsoft tenant id ${microsoftTenantId}`,
         err as Error,
       );
       throw err;
@@ -88,7 +93,7 @@ export class TenantService {
 
   async getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
-      const tenant = await this.getTenantByWorkspaceId(workspaceTenantId);
+      const tenant = await this.getWorkspaceByMicrosoft(workspaceTenantId);
       const prisma = await this.getPrismaForTenant(tenant);
       return { prisma, tenant };
     } catch (err) {

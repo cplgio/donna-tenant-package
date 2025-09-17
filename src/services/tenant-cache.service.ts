@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Redis } from 'ioredis';
+import type Redis from 'ioredis';
 import { TenantDoc } from '../types';
 
 const TENANT_CACHE_TTL_SECONDS = parseInt(process.env.TENANT_CACHE_TTL_SECONDS ?? '3600', 10);

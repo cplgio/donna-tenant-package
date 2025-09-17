@@ -1,0 +1,3 @@
+// Utils
+export const FIRESTORE_PROVIDER = 'TENANCY_FIRESTORE';
+export const REDIS_PROVIDER = 'TENANCY_REDIS';
