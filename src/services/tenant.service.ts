@@ -1,3 +1,4 @@
+// Dependencies
 import { Injectable, Logger } from '@nestjs/common';
 import type { Firestore } from 'firebase-admin/firestore';
 import type { PrismaClient } from '@prisma/client';
@@ -36,25 +37,37 @@ export class TenantService {
   }
 
   async getTenantByWorkspaceId(workspaceTenantId: string): Promise<TenantDoc> {
+    const { tenant } = await this.getWorkspaceByMicrosoft(workspaceTenantId);
+    return tenant;
+  }
+
+  async getWorkspaceByMicrosoft(
+    microsoftTenantId: string,
+  ): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
-      const cachedId = await this.cache.getTenantIdByWorkspace(workspaceTenantId);
-      if (cachedId) return await this.getTenantById(cachedId);
+      const cachedId = await this.cache.getTenantIdByWorkspace(microsoftTenantId);
+      if (cachedId) {
+        const tenant = await this.getTenantById(cachedId);
+        const prisma = await this.getPrismaForTenant(tenant);
+        return { tenant, prisma };
+      }
 
       const snap = await this.firestore
         .collection('tenants')
-        .where('microsoft.GRAPH_TENANT_ID', '==', workspaceTenantId)
+        .where('microsoft.GRAPH_TENANT_ID', '==', microsoftTenantId)
         .limit(1)
         .get();
       if (snap.empty) {
-        throw new Error(`Tenant workspace ${workspaceTenantId} not found`);
+        throw new Error(`Tenant workspace ${microsoftTenantId} not found`);
       }
       const doc = snap.docs[0];
       const tenant = { id: doc.id, ...(doc.data() as Omit<TenantDoc, 'id'>) };
       await this.cache.setTenant(tenant);
-      return tenant;
+      const prisma = await this.getPrismaForTenant(tenant);
+      return { tenant, prisma };
     } catch (err) {
       this.logger.error(
-        `Failed to get tenant by workspace id ${workspaceTenantId}`,
+        `Failed to get workspace by Microsoft tenant id ${microsoftTenantId}`,
         err as Error,
       );
       throw err;
@@ -88,9 +101,7 @@ export class TenantService {
 
   async getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
-      const tenant = await this.getTenantByWorkspaceId(workspaceTenantId);
-      const prisma = await this.getPrismaForTenant(tenant);
-      return { prisma, tenant };
+      return await this.getWorkspaceByMicrosoft(workspaceTenantId);
     } catch (err) {
       this.logger.error(
         `Failed to get Prisma by workspace tenant id ${workspaceTenantId}`,

@@ -55,7 +55,7 @@ export class ExampleService {
 Use o `TenantService` para obter o `PrismaClient` já apontando para o banco do tenant desejado:
 
 ```typescript
-const { prisma, tenant } = await tenantService.getPrismaByWorkspaceTenantId(workspaceTenantId);
+const { prisma, tenant } = await tenantService.getWorkspaceByMicrosoft(workspaceTenantId);
 const users = await prisma.user.findMany();
 ```
 
@@ -83,6 +83,7 @@ try {
 ### TenantService
 - `getTenantById(tenantId: string): Promise<TenantDoc>`
 - `getTenantByWorkspaceId(workspaceTenantId: string): Promise<TenantDoc>`
+- `getWorkspaceByMicrosoft(microsoftTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }>`
 - `getPrismaFor(input: ResolveInput): Promise<PrismaClient>`
 - `getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }>`
 

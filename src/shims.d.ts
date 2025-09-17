@@ -1,4 +1,5 @@
 declare module '@nestjs/common' {
+  export type Provider = Record<string, unknown>;
   export function Injectable(): ClassDecorator;
   export function Global(): ClassDecorator;
   export function Module(metadata: {
@@ -6,6 +7,7 @@ declare module '@nestjs/common' {
     exports?: unknown[];
     imports?: unknown[];
   }): ClassDecorator;
+  export function Inject(token: string | symbol | Record<string, unknown>): ParameterDecorator;
   export class Logger {
     constructor(context: string);
     log(message: string, ...optionalParams: unknown[]): void;
@@ -31,6 +33,8 @@ declare module '@prisma/client' {
 }
 
 declare module 'firebase-admin/firestore' {
+  export function getFirestore(): Firestore;
+
   export interface FirestoreQuerySnapshot {
     empty: boolean;
     docs: Array<{
@@ -63,6 +67,18 @@ declare module 'firebase-admin/firestore' {
   }
 }
 
+declare module 'firebase-admin/app' {
+  export interface CredentialCertificate {
+    projectId: string;
+    clientEmail: string;
+    privateKey: string;
+  }
+
+  export function cert(certificate: CredentialCertificate): unknown;
+  export function initializeApp(options: { credential: unknown }): void;
+  export function getApps(): unknown[];
+}
+
 declare namespace FirebaseFirestore {
   type WhereFilterOp =
     | '<'
@@ -78,7 +94,13 @@ declare namespace FirebaseFirestore {
 }
 
 declare module 'ioredis' {
-  export interface Redis {
+  export interface RedisOptions {
+    lazyConnect?: boolean;
+    [key: string]: unknown;
+  }
+
+  export default class Redis {
+    constructor(connectionString: string, options?: RedisOptions);
     get(key: string): Promise<string | null>;
     set(key: string, value: string, mode?: string, duration?: number): Promise<'OK' | null>;
     del(...keys: string[]): Promise<number>;
@@ -91,6 +113,10 @@ declare namespace NodeJS {
     TENANT_PRISMA_CACHE_TTL_MS?: string;
     TENANT_PRISMA_CACHE_MAX?: string;
     TENANT_CACHE_TTL_SECONDS?: string;
+    FIREBASE_PROJECT_ID?: string;
+    FIREBASE_CLIENT_EMAIL?: string;
+    FIREBASE_PRIVATE_KEY?: string;
+    REDIS_URL?: string;
     [key: string]: string | undefined;
   }
 }
