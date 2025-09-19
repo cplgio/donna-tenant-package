@@ -1,7 +1,12 @@
+// Dependencies
+import type { PrismaClient } from '@prisma/client';
+import type { KeyObject } from 'node:crypto';
+
+// Types
 export interface TenantMicrosoftConfig {
   GRAPH_TENANT_ID: string;
   GRAPH_CLIENT_ID: string;
-  GRAPH_CLIENT_SECRET: string;
+  GRAPH_CLIENT_SECRET?: string;
   GRAPH_REDIRECT_URI?: string;
   GRAPH_SCOPE?: string;
 }
@@ -14,7 +19,39 @@ export interface TenantDoc {
   microsoft?: TenantMicrosoftConfig;
 }
 
+export type TenantSnapshot = Omit<TenantDoc, 'microsoft'> & {
+  readonly microsoft?: Omit<TenantMicrosoftConfig, 'GRAPH_CLIENT_SECRET'>;
+};
+
 export interface ResolveInput {
   tenantId?: string;
   userId?: string;
+}
+
+export type TenantContextSource =
+  | 'tenantId'
+  | 'userId'
+  | 'workspaceTenantId'
+  | 'microsoftTenantId';
+
+export interface TenantContextMetadata {
+  readonly source: TenantContextSource;
+  readonly identifier: string;
+}
+
+export interface TenantContextSnapshot {
+  readonly tenant: TenantSnapshot;
+  readonly prisma: PrismaClient;
+  readonly metadata: TenantContextMetadata;
+  readonly secrets: TenantSecretBundle;
+}
+
+export interface TenantContextState extends TenantContextSnapshot {
+  readonly createdAt: Date;
+}
+
+export interface TenantSecretBundle {
+  readonly microsoft?: {
+    readonly clientSecret: KeyObject;
+  };
 }

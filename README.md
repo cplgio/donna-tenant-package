@@ -65,6 +65,69 @@ Também é possível resolver diretamente por `tenantId`:
 const prisma = await tenantService.getPrismaFor({ tenantId: 'abc' });
 ```
 
+## Contexto de tenant por unidade de trabalho
+
+O módulo fornece um `TenantContextService` baseado em `AsyncLocalStorage` que mantém o tenant ativo durante toda a unidade de trabalho (requisições HTTP, jobs de fila, crons). Isso evita a necessidade de repassar `tenantId` entre camadas e elimina `await` repetitivos para recuperar o mesmo `PrismaClient`.
+
+```typescript
+// Controller ou consumer do job
+@Controller()
+export class BillingController {
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly tenantContext: TenantContextService,
+    // Service do domínio responsável pela cobrança
+    private readonly billingService: BillingService,
+  ) {}
+
+  @Post(':tenantId/charge')
+  async chargeTenant(@Param('tenantId') tenantId: string) {
+    return this.tenantService.withTenantContext({ tenantId }, async () => {
+      const prisma = this.tenantContext.getPrismaClient();
+      const tenant = this.tenantContext.getTenant();
+
+      // Toda a cadeia de chamadas abaixo reaproveita o mesmo contexto
+      await this.billingService.charge(prisma, tenant);
+      return { tenantId: tenant.id, chargedAt: new Date() };
+    });
+  }
+}
+```
+
+### Comportamento do contexto
+
+1. **Isolamento por escopo**: cada chamada de `withTenantContext` cria um armazenamento isolado. Handlers aninhados reutilizam o contexto ativo quando resolvem o mesmo tenant.
+2. **Cache em camadas**: ao iniciar o contexto, o serviço reutiliza dados em memória, depois Redis e por fim Firestore, reduzindo I/O sempre que possível.
+3. **Acesso seguro**: `TenantContextService` lança exceção caso seja utilizado fora de um escopo inicializado, evitando leituras inseguras ou de tenants incorretos.
+4. **Tipagem forte**: as estruturas `TenantContextSnapshot` e `TenantContextMetadata` descrevem todo o ciclo do contexto, auxiliando no entendimento do fluxo.
+5. **Segredos fora do tenant**: o contexto mantém apenas dados sanitizados do tenant. Segredos são materializados pelo `TenantSecretVaultService` em objetos `KeyObject` e ficam disponíveis via `tenantContext.getSecrets()`.
+
+Durante o handler, injete apenas `TenantContextService` para recuperar `tenant`, `metadata`, `secrets` ou `PrismaClient` sem chamadas adicionais ao banco.
+
+### Cofre de segredos do tenant
+
+Quando o tenant é resolvido, o `TenantSecretVaultService` extrai todas as chaves sensíveis (por exemplo `GRAPH_CLIENT_SECRET`) e as armazena em memória utilizando `KeyObject` do Node.js. Dessa forma, os segredos nunca circulam como `string` na aplicação, reduzindo riscos de logs acidentais ou serialização indevida.
+
+```typescript
+// Service do domínio
+@Injectable()
+export class GraphService {
+  constructor(private readonly tenantContext: TenantContextService) {}
+
+  async createAccessToken() {
+    const { microsoft } = this.tenantContext.getSecrets();
+    if (!microsoft) throw new Error('Tenant não possui configuração Microsoft.');
+
+    const secretBuffer = microsoft.clientSecret.export();
+    // use secretBuffer para assinar requisições ou gerar tokens
+  }
+}
+```
+
+> `TenantSecretVaultService` também pode ser injetado diretamente para acessar ou invalidar segredos fora do escopo do contexto (`getSecrets`, `clearSecrets`). Utilize esse recurso para rotacionar chaves com segurança após operações de gerenciamento.
+
+Os segredos são renovados toda vez que o tenant é buscado do Firestore, garantindo alinhamento com rotações de credenciais e reduzindo o número de acessos diretos ao banco.
+
 ## Tratamento de erros
 
 Todos os métodos do `TenantService` utilizam `try/catch` e registram logs detalhados. Ao consumir o serviço, envolva as chamadas em `try/catch` para capturar falhas de rede ou tenants inexistentes:
@@ -87,6 +150,8 @@ try {
 - `getPrismaFor(input: ResolveInput): Promise<PrismaClient>`
 - `getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }>`
 
+> Os tenants retornados são sanitizados: nenhum método expõe `GRAPH_CLIENT_SECRET`. Utilize `TenantContextService.getSecrets()` ou `TenantSecretVaultService.getSecrets()` para acessar segredos quando necessário.
+
 ### TenantCacheService
 - `getTenant(tenantId: string): Promise<TenantDoc | null>`
 - `setTenant(tenant: TenantDoc, ttlSeconds?: number): Promise<void>`
@@ -95,6 +160,12 @@ try {
 
 ### PrismaPoolService
 - `getClient(key: string, url: string): PrismaClient`
+
+### TenantSecretVaultService
+- `sanitizeTenant(tenant: TenantDoc): TenantSnapshot`
+- `captureFromTenant(tenant: TenantDoc): TenantSecretBundle`
+- `getSecrets(tenantId: string): TenantSecretBundle | undefined`
+- `clearSecrets(tenantId: string): void`
 
 ## Prisma schema e migrations
 

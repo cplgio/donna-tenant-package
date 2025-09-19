@@ -8,6 +8,8 @@ import Redis from 'ioredis';
 import { TenantCacheService } from './services/tenant-cache.service';
 import { PrismaPoolService } from './services/prisma-pool.service';
 import { TenantService } from './services/tenant.service';
+import { TenantContextService } from './services/tenant-context.service';
+import { TenantSecretVaultService } from './services/tenant-secret-vault.service';
 
 // Utils
 import { FIRESTORE_PROVIDER, REDIS_PROVIDER } from './tenancy.constants';
@@ -63,14 +65,32 @@ const prismaPoolProvider: Provider = {
   useFactory: (): PrismaPoolService => new PrismaPoolService(),
 };
 
+const tenantContextProvider: Provider = {
+  provide: TenantContextService,
+  useFactory: (): TenantContextService => new TenantContextService(),
+};
+
+const tenantSecretVaultProvider: Provider = {
+  provide: TenantSecretVaultService,
+  useFactory: (): TenantSecretVaultService => new TenantSecretVaultService(),
+};
+
 const tenantServiceProvider: Provider = {
   provide: TenantService,
   useFactory: (
     firestore: Firestore,
     cache: TenantCacheService,
     prismaPool: PrismaPoolService,
-  ): TenantService => new TenantService(firestore, cache, prismaPool),
-  inject: [FIRESTORE_PROVIDER, TenantCacheService, PrismaPoolService],
+    secretVault: TenantSecretVaultService,
+    context: TenantContextService,
+  ): TenantService => new TenantService(firestore, cache, prismaPool, secretVault, context),
+  inject: [
+    FIRESTORE_PROVIDER,
+    TenantCacheService,
+    PrismaPoolService,
+    TenantSecretVaultService,
+    TenantContextService,
+  ],
 };
 
 @Global()
@@ -80,8 +100,16 @@ const tenantServiceProvider: Provider = {
     redisProvider,
     tenantCacheProvider,
     prismaPoolProvider,
+    tenantContextProvider,
+    tenantSecretVaultProvider,
     tenantServiceProvider,
   ],
-  exports: [TenantService, TenantCacheService, PrismaPoolService],
+  exports: [
+    TenantService,
+    TenantCacheService,
+    PrismaPoolService,
+    TenantContextService,
+    TenantSecretVaultService,
+  ],
 })
 export class TenantModule {}

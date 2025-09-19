@@ -4,7 +4,16 @@ import type { Firestore } from 'firebase-admin/firestore';
 import type { PrismaClient } from '@prisma/client';
 import { TenantCacheService } from './tenant-cache.service';
 import { PrismaPoolService } from './prisma-pool.service';
-import { ResolveInput, TenantDoc } from '../types';
+import { TenantContextService } from './tenant-context.service';
+import { TenantSecretVaultService } from './tenant-secret-vault.service';
+import type {
+  ResolveInput,
+  TenantContextMetadata,
+  TenantContextSnapshot,
+  TenantContextState,
+  TenantDoc,
+  TenantSecretBundle,
+} from '../types';
 
 @Injectable()
 export class TenantService {
@@ -14,22 +23,26 @@ export class TenantService {
     private readonly firestore: Firestore,
     private readonly cache: TenantCacheService,
     private readonly prismaPool: PrismaPoolService,
+    private readonly secretVault: TenantSecretVaultService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   // Services
 
   async getTenantById(tenantId: string): Promise<TenantDoc> {
     try {
-      const cached = await this.cache.getTenant(tenantId);
-      if (cached) return cached;
-
-      const doc = await this.firestore.collection('tenants').doc(tenantId).get();
-      if (!doc.exists) {
-        throw new Error(`Tenant ${tenantId} not found`);
+      const context = this.tenantContext.getContext();
+      if (context?.tenant.id === tenantId) {
+        return context.tenant;
       }
-      const tenant = { id: doc.id, ...(doc.data() as Omit<TenantDoc, 'id'>) };
-      await this.cache.setTenant(tenant);
-      return tenant;
+
+      const cached = await this.cache.getTenant(tenantId);
+      if (cached) {
+        await this.ensureSecretBundle(cached);
+        return cached;
+      }
+
+      return await this.fetchTenantById(tenantId);
     } catch (err) {
       this.logger.error(`Failed to get tenant by id ${tenantId}`, err as Error);
       throw err;
@@ -45,6 +58,11 @@ export class TenantService {
     microsoftTenantId: string,
   ): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
+      const context = this.tenantContext.getContext();
+      if (context?.tenant.microsoft?.GRAPH_TENANT_ID === microsoftTenantId) {
+        return { tenant: context.tenant, prisma: context.prisma };
+      }
+
       const cachedId = await this.cache.getTenantIdByWorkspace(microsoftTenantId);
       if (cachedId) {
         const tenant = await this.getTenantById(cachedId);
@@ -61,10 +79,12 @@ export class TenantService {
         throw new Error(`Tenant workspace ${microsoftTenantId} not found`);
       }
       const doc = snap.docs[0];
-      const tenant = { id: doc.id, ...(doc.data() as Omit<TenantDoc, 'id'>) };
-      await this.cache.setTenant(tenant);
-      const prisma = await this.getPrismaForTenant(tenant);
-      return { tenant, prisma };
+      const registered = await this.registerTenant({
+        id: doc.id,
+        ...(doc.data() as Omit<TenantDoc, 'id'>),
+      });
+      const prisma = await this.getPrismaForTenant(registered);
+      return { tenant: registered, prisma };
     } catch (err) {
       this.logger.error(
         `Failed to get workspace by Microsoft tenant id ${microsoftTenantId}`,
@@ -76,20 +96,17 @@ export class TenantService {
 
   async getPrismaFor(input: ResolveInput): Promise<PrismaClient> {
     try {
+      const context = this.tenantContext.getContext();
+      if (context && this.matchesContextInput(context, input)) {
+        return context.prisma;
+      }
+
       if (input.tenantId) {
         const tenant = await this.getTenantById(input.tenantId);
         return await this.getPrismaForTenant(tenant);
       }
       if (input.userId) {
-        const snap = await this.firestore
-          .collection('user_tenants')
-          .where('userId', '==', input.userId)
-          .where('active', '==', true)
-          .limit(1)
-          .get();
-        const tenantId = snap.docs[0]?.data()?.tenantId as string | undefined;
-        if (!tenantId) throw new Error(`Tenant for user ${input.userId} not found`);
-        const tenant = await this.getTenantById(tenantId);
+        const tenant = await this.getTenantByUserId(input.userId);
         return await this.getPrismaForTenant(tenant);
       }
       throw new Error('tenantId or userId required');
@@ -101,6 +118,11 @@ export class TenantService {
 
   async getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
+      const context = this.tenantContext.getContext();
+      if (context?.tenant.microsoft?.GRAPH_TENANT_ID === workspaceTenantId) {
+        return { prisma: context.prisma, tenant: context.tenant };
+      }
+
       return await this.getWorkspaceByMicrosoft(workspaceTenantId);
     } catch (err) {
       this.logger.error(
@@ -111,9 +133,114 @@ export class TenantService {
     }
   }
 
+  async withTenantContext<T>(input: ResolveInput, handler: () => Promise<T>): Promise<T> {
+    const activeContext = this.tenantContext.getContext();
+    if (activeContext && this.matchesContextInput(activeContext, input)) {
+      return handler();
+    }
+
+    const snapshot = await this.resolveTenantContext(input);
+    return this.tenantContext.runWithTenant(snapshot, handler);
+  }
+
   // Utils
 
   private async getPrismaForTenant(tenant: TenantDoc): Promise<PrismaClient> {
     return this.prismaPool.getClient(tenant.id, tenant.db);
+  }
+
+  private matchesContextInput(context: TenantContextState, input: ResolveInput): boolean {
+    if (input.tenantId) {
+      return context.tenant.id === input.tenantId;
+    }
+
+    if (input.userId) {
+      return (
+        context.metadata.source === 'userId' && context.metadata.identifier === input.userId
+      );
+    }
+
+    return false;
+  }
+
+  private async resolveTenantContext(input: ResolveInput): Promise<TenantContextSnapshot> {
+    if (input.tenantId) {
+      const tenant = await this.getTenantById(input.tenantId);
+      const prisma = await this.getPrismaForTenant(tenant);
+      return await this.createContextSnapshot(tenant, prisma, {
+        source: 'tenantId',
+        identifier: input.tenantId,
+      });
+    }
+
+    if (input.userId) {
+      const tenant = await this.getTenantByUserId(input.userId);
+      const prisma = await this.getPrismaForTenant(tenant);
+      return await this.createContextSnapshot(tenant, prisma, {
+        source: 'userId',
+        identifier: input.userId,
+      });
+    }
+
+    throw new Error('tenantId or userId required');
+  }
+
+  private async createContextSnapshot(
+    tenant: TenantDoc,
+    prisma: PrismaClient,
+    metadata: TenantContextMetadata,
+  ): Promise<TenantContextSnapshot> {
+    await this.ensureSecretBundle(tenant);
+    const safeTenant = tenant.microsoft?.GRAPH_CLIENT_SECRET
+      ? this.secretVault.sanitizeTenant(tenant)
+      : (tenant as TenantContextSnapshot['tenant']);
+    const secrets =
+      this.secretVault.getSecrets(tenant.id) ?? (Object.freeze({}) as TenantSecretBundle);
+    return { tenant: safeTenant, prisma, metadata, secrets };
+  }
+
+  private async fetchTenantById(tenantId: string): Promise<TenantDoc> {
+    const doc = await this.firestore.collection('tenants').doc(tenantId).get();
+    if (!doc.exists) {
+      throw new Error(`Tenant ${tenantId} not found`);
+    }
+    return this.registerTenant({ id: doc.id, ...(doc.data() as Omit<TenantDoc, 'id'>) });
+  }
+
+  private async registerTenant(tenant: TenantDoc): Promise<TenantDoc> {
+    this.secretVault.captureFromTenant(tenant);
+    const sanitized = this.secretVault.sanitizeTenant(tenant);
+    await this.cache.setTenant(sanitized);
+    return sanitized as TenantDoc;
+  }
+
+  private async ensureSecretBundle(tenant: TenantDoc): Promise<void> {
+    if (this.secretVault.getSecrets(tenant.id)) {
+      return;
+    }
+
+    if (tenant.microsoft?.GRAPH_CLIENT_SECRET) {
+      this.secretVault.captureFromTenant(tenant);
+      return;
+    }
+
+    await this.fetchTenantById(tenant.id);
+  }
+
+  private async getTenantByUserId(userId: string): Promise<TenantDoc> {
+    const context = this.tenantContext.getContext();
+    if (context?.metadata.source === 'userId' && context.metadata.identifier === userId) {
+      return context.tenant;
+    }
+
+    const snap = await this.firestore
+      .collection('user_tenants')
+      .where('userId', '==', userId)
+      .where('active', '==', true)
+      .limit(1)
+      .get();
+    const tenantId = snap.docs[0]?.data()?.tenantId as string | undefined;
+    if (!tenantId) throw new Error(`Tenant for user ${userId} not found`);
+    return this.getTenantById(tenantId);
   }
 }
