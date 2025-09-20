@@ -1,7 +1,7 @@
 // Dependencies
 import { Injectable, Logger } from '@nestjs/common';
-import type { Firestore } from 'firebase-admin/firestore';
 import type { PrismaClient } from '@prisma/client';
+import type { Firestore } from 'firebase-admin/firestore';
 import { TenantCacheService } from './tenant-cache.service';
 import { PrismaPoolService } from './prisma-pool.service';
 import { TenantContextService } from './tenant-context.service';
@@ -60,16 +60,28 @@ export class TenantService {
     try {
       const context = this.tenantContext.getContext();
       if (this.matchesWorkspaceTenant(context, microsoftTenantId)) {
+        this.logger.log(
+          `Workspace ${microsoftTenantId} already resolved in active context. Reusing Prisma instance from AsyncLocalStorage.`,
+        );
         return { tenant: context.tenant, prisma: context.prisma };
       }
 
+      this.logger.log(
+        `Workspace ${microsoftTenantId} not found in active context. Attempting cache lookup for workspace -> tenant mapping.`,
+      );
       const cachedId = await this.cache.getTenantIdByWorkspace(microsoftTenantId);
       if (cachedId) {
+        this.logger.log(
+          `Cache hit for workspace ${microsoftTenantId}. Resolving tenant ${cachedId} without hitting Firestore.`,
+        );
         const tenant = await this.getTenantById(cachedId);
         const prisma = await this.getPrismaForTenant(tenant);
         return { tenant, prisma };
       }
 
+      this.logger.log(
+        `Cache miss for workspace ${microsoftTenantId}. Querying Firestore for tenant registration.`,
+      );
       const snap = await this.firestore
         .collection('tenants')
         .where('microsoft.GRAPH_TENANT_ID', '==', microsoftTenantId)
@@ -79,11 +91,17 @@ export class TenantService {
         throw new Error(`Tenant workspace ${microsoftTenantId} not found`);
       }
       const doc = snap.docs[0];
+      this.logger.log(
+        `Firestore lookup for workspace ${microsoftTenantId} returned tenant ${doc.id}. Registering tenant in caches and secret vault.`,
+      );
       const registered = await this.registerTenant({
         id: doc.id,
         ...(doc.data() as Omit<TenantDoc, 'id'>),
       });
       const prisma = await this.getPrismaForTenant(registered);
+      this.logger.log(
+        `Tenant ${registered.id} ready for workspace ${microsoftTenantId}. Prisma client pooled and cached.`,
+      );
       return { tenant: registered, prisma };
     } catch (err) {
       this.logger.error(
@@ -149,14 +167,23 @@ export class TenantService {
   ): Promise<T> {
     const activeContext = this.tenantContext.getContext();
     if (this.matchesWorkspaceTenant(activeContext, workspaceTenantId)) {
+      this.logger.log(
+        `runWithWorkspaceContext: Reusing active context for workspace ${workspaceTenantId}.`,
+      );
       return handler();
     }
 
+    this.logger.log(
+      `runWithWorkspaceContext: Resolving workspace ${workspaceTenantId} and creating scoped tenant context.`,
+    );
     const { tenant, prisma } = await this.getWorkspaceByMicrosoft(workspaceTenantId);
     const snapshot = await this.createContextSnapshot(tenant, prisma, {
       source: 'workspaceTenantId',
       identifier: workspaceTenantId,
     });
+    this.logger.log(
+      `runWithWorkspaceContext: Context snapshot created for workspace ${workspaceTenantId}. Executing handler within scoped context.`,
+    );
     return this.tenantContext.runWithTenant(snapshot, handler);
   }
 

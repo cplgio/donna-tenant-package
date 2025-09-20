@@ -80,6 +80,16 @@ await tenantService.runWithWorkspaceContext(workspaceTenantId, async () => {
 
 Caso já exista um contexto ativo para o mesmo workspace, nenhum round-trip adicional ao Firestore é realizado; o pacote apenas reaproveita o contexto atual.
 
+### Observabilidade do fluxo de workspace
+
+O método `runWithWorkspaceContext` e a resolução de workspaces em `TenantService` emitem logs informativos descrevendo cada passo do fluxo:
+
+1. **Reaproveitamento de contexto** – quando o workspace já está ativo em `AsyncLocalStorage`, o serviço apenas reaproveita os objetos existentes.
+2. **Cache em memória/Redis** – se não houver contexto ativo, o serviço tenta resolver o `tenantId` diretamente do cache, evitando consultas ao Firestore.
+3. **Consulta ao Firestore (fallback)** – somente em caso de `cache miss` o Firestore é acionado para registrar o tenant e hidratar o `PrismaClient`.
+
+Ative o nível `log`/`debug` do logger do NestJS para acompanhar a jornada completa do tenant, entender cache hits e validar que o Firestore só é acessado quando necessário. Isso reduz o risco de sobrecarga tanto em memória quanto no Firebase, uma vez que os objetos de contexto são compartilhados e as conexões Prisma são gerenciadas via pool com TTL.
+
 ## Contexto de tenant por unidade de trabalho
 
 O módulo fornece um `TenantContextService` baseado em `AsyncLocalStorage` que mantém o tenant ativo durante toda a unidade de trabalho (requisições HTTP, jobs de fila, crons). Isso evita a necessidade de repassar `tenantId` entre camadas e elimina `await` repetitivos para recuperar o mesmo `PrismaClient`.
