@@ -65,6 +65,21 @@ Também é possível resolver diretamente por `tenantId`:
 const prisma = await tenantService.getPrismaFor({ tenantId: 'abc' });
 ```
 
+## Executando unidades de trabalho com contexto de workspace
+
+Quando sua lógica recebe apenas o `workspaceTenantId`, utilize `runWithWorkspaceContext` para garantir que o handler seja executado com o contexto correto, reaproveitando o `TenantContextService` ativo sempre que possível:
+
+```typescript
+await tenantService.runWithWorkspaceContext(workspaceTenantId, async () => {
+  const prisma = tenantContext.getPrismaClient();
+  const tenant = tenantContext.getTenant();
+
+  await billingService.charge(prisma, tenant);
+});
+```
+
+Caso já exista um contexto ativo para o mesmo workspace, nenhum round-trip adicional ao Firestore é realizado; o pacote apenas reaproveita o contexto atual.
+
 ## Contexto de tenant por unidade de trabalho
 
 O módulo fornece um `TenantContextService` baseado em `AsyncLocalStorage` que mantém o tenant ativo durante toda a unidade de trabalho (requisições HTTP, jobs de fila, crons). Isso evita a necessidade de repassar `tenantId` entre camadas e elimina `await` repetitivos para recuperar o mesmo `PrismaClient`.

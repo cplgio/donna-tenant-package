@@ -59,7 +59,7 @@ export class TenantService {
   ): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
       const context = this.tenantContext.getContext();
-      if (context?.tenant.microsoft?.GRAPH_TENANT_ID === microsoftTenantId) {
+      if (this.matchesWorkspaceTenant(context, microsoftTenantId)) {
         return { tenant: context.tenant, prisma: context.prisma };
       }
 
@@ -119,7 +119,7 @@ export class TenantService {
   async getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }> {
     try {
       const context = this.tenantContext.getContext();
-      if (context?.tenant.microsoft?.GRAPH_TENANT_ID === workspaceTenantId) {
+      if (this.matchesWorkspaceTenant(context, workspaceTenantId)) {
         return { prisma: context.prisma, tenant: context.tenant };
       }
 
@@ -143,10 +143,34 @@ export class TenantService {
     return this.tenantContext.runWithTenant(snapshot, handler);
   }
 
+  async runWithWorkspaceContext<T>(
+    workspaceTenantId: string,
+    handler: () => Promise<T>,
+  ): Promise<T> {
+    const activeContext = this.tenantContext.getContext();
+    if (this.matchesWorkspaceTenant(activeContext, workspaceTenantId)) {
+      return handler();
+    }
+
+    const { tenant, prisma } = await this.getWorkspaceByMicrosoft(workspaceTenantId);
+    const snapshot = await this.createContextSnapshot(tenant, prisma, {
+      source: 'workspaceTenantId',
+      identifier: workspaceTenantId,
+    });
+    return this.tenantContext.runWithTenant(snapshot, handler);
+  }
+
   // Utils
 
   private async getPrismaForTenant(tenant: TenantDoc): Promise<PrismaClient> {
     return this.prismaPool.getClient(tenant.id, tenant.db);
+  }
+
+  private matchesWorkspaceTenant(
+    context: TenantContextState | undefined,
+    workspaceTenantId: string,
+  ): context is TenantContextState {
+    return context?.tenant.microsoft?.GRAPH_TENANT_ID === workspaceTenantId;
   }
 
   private matchesContextInput(context: TenantContextState, input: ResolveInput): boolean {
