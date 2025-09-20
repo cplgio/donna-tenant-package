@@ -7,6 +7,7 @@
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Runtime Helper](#runtime-helper)
+- [Workspace handler factory](#workspace-handler-factory)
 - [NestJS Module](#nestjs-module)
 - [Services](#services)
   - [TenantService](#tenantservice)
@@ -84,6 +85,37 @@ runWithWorkspaceContext<T>(
 - Delegates to `TenantService.runWithWorkspaceContext` to resolve tenants, allocate Prisma clients, and run the handler inside `TenantContextService`.
 - Logs helper-level errors only when a logger is provided.
 - Rethrows both context and handler failures so applications remain responsible for retries and observability.
+
+## Workspace handler factory
+`TenantService.createWorkspaceHandler` builds reusable workspace-aware functions that forward to
+`runWithWorkspaceContext`. The factory accepts the same handler signatures (with or without the
+context accessor bag) and optional `TenantWorkspaceRunnerOptions`, returning an async function that
+receives a workspace tenant identifier.
+
+### Creating a handler
+```ts
+const processWorkspace = tenantService.createWorkspaceHandler(
+  async ({ getTenant, getPrismaClient }) => {
+    const tenant = getTenant();
+    const prisma = getPrismaClient();
+    // Handler logic scoped to the resolved workspace context.
+  },
+  {
+    logger,
+    contextErrorMessage: 'Workspace context could not be initialised.',
+    handlerErrorMessage: 'Workspace handler execution failed.',
+  },
+);
+
+await processWorkspace(workspaceTenantId);
+```
+
+### Behaviour
+- Returns a memoised function that can be injected or stored in services for repeated use.
+- Reuses any active workspace context before preparing a new one, matching
+  `runWithWorkspaceContext` semantics.
+- Supports both handler signatures: with access to the context bag or as a plain callback.
+- Centralises logging and messaging through the provided `TenantWorkspaceRunnerOptions`.
 
 ## NestJS Module
 ### `TenantModule`

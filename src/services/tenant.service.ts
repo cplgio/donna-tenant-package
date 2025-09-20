@@ -192,6 +192,28 @@ export class TenantService {
     return TenantWorkspaceRunner.run(this, workspaceTenantId, handler, options);
   }
 
+  createWorkspaceHandler<T>(
+    handler: TenantWorkspaceHandler<T> | TenantWorkspaceCallback<T>,
+  ): (workspaceTenantId: string) => Promise<T>;
+  createWorkspaceHandler<T>(
+    handler: TenantWorkspaceHandler<T> | TenantWorkspaceCallback<T>,
+    options: TenantWorkspaceRunnerOptions,
+  ): (workspaceTenantId: string) => Promise<T>;
+  createWorkspaceHandler<T>(
+    handler: TenantWorkspaceHandler<T> | TenantWorkspaceCallback<T>,
+    options?: TenantWorkspaceRunnerOptions,
+  ): (workspaceTenantId: string) => Promise<T> {
+    return async (workspaceTenantId: string) => {
+      if (!options && handler.length === 0) {
+        return this.runWithWorkspaceContext(
+          workspaceTenantId,
+          handler as TenantWorkspaceCallback<T>,
+        );
+      }
+      return TenantWorkspaceRunner.run(this, workspaceTenantId, handler, options);
+    };
+  }
+
   private async runWithWorkspaceContextInternal<T>(
     workspaceTenantId: string,
     handler: TenantWorkspaceCallback<T>,
