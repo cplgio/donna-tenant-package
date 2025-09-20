@@ -1,6 +1,6 @@
 {
   "name": "@donna/tenancy",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Donna multi-tenant utilities",
   "private": false,
   "main": "./dist/cjs/index.js",
@@ -21,8 +21,10 @@
     "build": "npm run clean && npm run build:esm && npm run build:cjs",
     "build:esm": "tsc -p tsconfig.build.esm.json",
     "build:cjs": "tsc -p tsconfig.build.cjs.json",
+    "build:test": "tsc -p tsconfig.test.json",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "test": "npm run build:test && node --test dist/test"
   },
   "peerDependencies": {
     "@nestjs/common": ">=9.0.0",
