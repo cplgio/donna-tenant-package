@@ -4,5 +4,6 @@ export * from './services/tenant-cache.service';
 export * from './services/prisma-pool.service';
 export * from './services/tenant-context.service';
 export * from './services/tenant-secret-vault.service';
+export * from './runtime/workspace-runner';
 export * from './types';
 export * from './tenancy.constants';

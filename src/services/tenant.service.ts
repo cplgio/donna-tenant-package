@@ -2,10 +2,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import type { Firestore } from 'firebase-admin/firestore';
+
+// Services
 import { TenantCacheService } from './tenant-cache.service';
 import { PrismaPoolService } from './prisma-pool.service';
 import { TenantContextService } from './tenant-context.service';
 import { TenantSecretVaultService } from './tenant-secret-vault.service';
+import type {
+  TenantWorkspaceCallback,
+  TenantWorkspaceHandler,
+  TenantWorkspaceRunnerOptions,
+} from '../runtime/workspace-runner';
+import { TenantWorkspaceRunner } from '../runtime/workspace-runner';
+
+// Types
 import type {
   ResolveInput,
   TenantContextMetadata,
@@ -163,7 +173,28 @@ export class TenantService {
 
   async runWithWorkspaceContext<T>(
     workspaceTenantId: string,
-    handler: () => Promise<T>,
+    handler: TenantWorkspaceCallback<T>,
+  ): Promise<T>;
+  async runWithWorkspaceContext<T>(
+    workspaceTenantId: string,
+    handler: TenantWorkspaceHandler<T> | TenantWorkspaceCallback<T>,
+    options: TenantWorkspaceRunnerOptions,
+  ): Promise<T>;
+  async runWithWorkspaceContext<T>(
+    workspaceTenantId: string,
+    handler: TenantWorkspaceHandler<T> | TenantWorkspaceCallback<T>,
+    options?: TenantWorkspaceRunnerOptions,
+  ): Promise<T> {
+    if (!options && handler.length === 0) {
+      return this.runWithWorkspaceContextInternal(workspaceTenantId, handler as TenantWorkspaceCallback<T>);
+    }
+
+    return TenantWorkspaceRunner.run(this, workspaceTenantId, handler, options);
+  }
+
+  private async runWithWorkspaceContextInternal<T>(
+    workspaceTenantId: string,
+    handler: TenantWorkspaceCallback<T>,
   ): Promise<T> {
     const activeContext = this.tenantContext.getContext();
     if (this.matchesWorkspaceTenant(activeContext, workspaceTenantId)) {
