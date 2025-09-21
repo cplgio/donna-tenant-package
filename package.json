@@ -13,10 +13,11 @@
       "require": "./dist/cjs/index.js",
       "default": "./dist/esm/index.js"
     },
+    "./prisma/schema.prisma": "./prisma/schema.prisma",
     "./package.json": "./package.json"
   },
   "sideEffects": false,
-  "files": ["dist"],
+  "files": ["dist", "prisma"],
   "scripts": {
     "build": "npm run clean && npm run build:esm && npm run build:cjs",
     "build:esm": "tsc -p tsconfig.build.esm.json",

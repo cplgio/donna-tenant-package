@@ -6,6 +6,7 @@
 ## Table of Contents
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Prisma schema](#prisma-schema)
 - [Runtime Helper](#runtime-helper)
 - [Workspace handler factory](#workspace-handler-factory)
 - [NestJS Module](#nestjs-module)
@@ -51,6 +52,36 @@ Set the following environment variables before bootstrapping your NestJS applica
 | `TENANT_CACHE_TTL_SECONDS` | No | Time-to-live (seconds) applied when caching tenant documents. Defaults to `3600`. |
 | `TENANT_PRISMA_CACHE_TTL_MS` | No | TTL (milliseconds) used by the Prisma client pool. Defaults to `1800000`. |
 | `TENANT_PRISMA_CACHE_MAX` | No | Maximum number of pooled Prisma clients. Defaults to `20`. |
+
+## Prisma schema
+`@donna/tenancy` distribui o schema Prisma oficial do ecossistema Donna no caminho `@donna/tenancy/prisma/schema.prisma`. Isso
+permite que APIs consumidoras reutilizem o modelo compartilhado sem precisar manter uma cópia local de `schema.prisma`.
+
+### Quando usar
+- Para gerar o Prisma Client da sua API durante `postinstall` ou pipelines de CI/CD sem duplicar o schema.
+- Para rodar migrações locais apontando diretamente para o schema publicado pelo pacote multi-tenant.
+
+### Como referenciar o schema publicado
+```jsonc
+// package.json da API consumidora
+{
+  "scripts": {
+    "prisma:generate": "prisma generate --schema node_modules/@donna/tenancy/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate deploy --schema node_modules/@donna/tenancy/prisma/schema.prisma"
+  }
+}
+```
+
+Você também pode apontar o Prisma CLI para o schema compartilhado via variável de ambiente:
+
+```bash
+export PRISMA_SCHEMA_PATH="node_modules/@donna/tenancy/prisma/schema.prisma"
+npx prisma generate
+```
+
+> 💡 Após configurar os comandos acima, remova o `schema.prisma` duplicado do projeto consumidor. O pacote publica o arquivo
+> dentro do diretório `prisma/` e o exporta explicitamente, garantindo que `npm`, `pnpm` ou `yarn` incluam o schema no artefato
+> publicado.
 
 ## Runtime Helper
 `TenantWorkspaceRunner` exposes a single entry point, `runWithWorkspaceContext`, that executes asynchronous handlers inside a workspace-aware tenant context. The helper wraps `TenantService.runWithWorkspaceContext`, adds optional logging, and preserves existing context when one is already active.
