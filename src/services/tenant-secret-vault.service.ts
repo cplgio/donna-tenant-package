@@ -3,19 +3,35 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createSecretKey } from 'node:crypto';
 
 // Types
-import type { TenantDoc, TenantSecretBundle, TenantSnapshot } from '../types';
+import type {
+  TenantDoc,
+  TenantSecretBundle,
+  TenantSnapshot,
+} from '../types';
 
 // Utils
 const cloneWithoutSecrets = (tenant: TenantDoc): TenantSnapshot => {
-  if (!tenant.microsoft) {
-    return Object.freeze({ ...tenant }) as TenantSnapshot;
+  const { microsoft, qdrant, ...rest } = tenant;
+
+  let safeMicrosoft: TenantSnapshot['microsoft'];
+  if (microsoft) {
+    const { GRAPH_CLIENT_SECRET: _secret, ...microsoftSafe } = microsoft;
+    safeMicrosoft = Object.freeze({ ...microsoftSafe }) as TenantSnapshot['microsoft'];
   }
 
-  const { GRAPH_CLIENT_SECRET: _secret, ...safeMicrosoft } = tenant.microsoft;
-  return Object.freeze({
-    ...tenant,
-    microsoft: Object.freeze({ ...safeMicrosoft }),
+  let safeQdrant: TenantSnapshot['qdrant'];
+  if (qdrant) {
+    const { QDRANT_API_KEY: _secret, ...qdrantSafe } = qdrant;
+    safeQdrant = Object.freeze({ ...qdrantSafe }) as TenantSnapshot['qdrant'];
+  }
+
+  const safeTenant: TenantSnapshot = Object.freeze({
+    ...rest,
+    ...(safeMicrosoft ? { microsoft: safeMicrosoft } : {}),
+    ...(safeQdrant ? { qdrant: safeQdrant } : {}),
   }) as TenantSnapshot;
+
+  return safeTenant;
 };
 
 @Injectable()
@@ -53,16 +69,34 @@ export class TenantSecretVaultService {
   // Utils
 
   private buildBundle(tenant: TenantDoc): TenantSecretBundle {
-    if (!tenant.microsoft?.GRAPH_CLIENT_SECRET) {
+    const microsoftSecret = tenant.microsoft?.GRAPH_CLIENT_SECRET
+      ? createSecretKey(Buffer.from(tenant.microsoft.GRAPH_CLIENT_SECRET, 'utf8'))
+      : undefined;
+    const qdrantSecret = tenant.qdrant?.QDRANT_API_KEY
+      ? createSecretKey(Buffer.from(tenant.qdrant.QDRANT_API_KEY, 'utf8'))
+      : undefined;
+
+    if (!microsoftSecret && !qdrantSecret) {
       return Object.freeze({}) as TenantSecretBundle;
     }
 
-    const clientSecret = createSecretKey(Buffer.from(tenant.microsoft.GRAPH_CLIENT_SECRET, 'utf8'));
     const bundle: TenantSecretBundle = Object.freeze({
-      microsoft: Object.freeze({
-        clientSecret,
-      }),
+      ...(microsoftSecret
+        ? {
+            microsoft: Object.freeze({
+              clientSecret: microsoftSecret,
+            }),
+          }
+        : {}),
+      ...(qdrantSecret
+        ? {
+            qdrant: Object.freeze({
+              apiKey: qdrantSecret,
+            }),
+          }
+        : {}),
     });
+
     return bundle;
   }
 }

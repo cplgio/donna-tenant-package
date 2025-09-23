@@ -211,9 +211,9 @@ Responsável por isolar informações sensíveis de cada tenant e fornecer snaps
 
 | Função | Quando usar | Comportamento |
 | --- | --- | --- |
-| `sanitizeTenant(tenant: TenantDoc): TenantSnapshot` | Antes de compartilhar dados de tenant com consumidores que não devem ver segredos. | Remove `GRAPH_CLIENT_SECRET`, congela objetos internos e retorna um `TenantSnapshot` seguro. |
-| `captureFromTenant(tenant: TenantDoc): TenantSecretBundle` | Ao registrar/atualizar tenants contendo secrets que precisam ser reutilizados. | Constrói `TenantSecretBundle` com `KeyObject` derivado do secret, armazena no vault interno e retorna a instância congelada. |
-| `getSecrets(tenantId: string): TenantSecretBundle \| undefined` | Para recuperar secrets previamente capturados ao montar contexto ou executar integrações. | Busca no vault em memória e retorna bundle (imutável) ou `undefined` quando inexistente. |
+| `sanitizeTenant(tenant: TenantDoc): TenantSnapshot` | Antes de compartilhar dados de tenant com consumidores que não devem ver segredos. | Remove `GRAPH_CLIENT_SECRET` e `QDRANT_API_KEY`, congela objetos internos e retorna um `TenantSnapshot` seguro. |
+| `captureFromTenant(tenant: TenantDoc): TenantSecretBundle` | Ao registrar/atualizar tenants contendo secrets que precisam ser reutilizados. | Constrói `TenantSecretBundle` com `KeyObject` derivado dos secrets (Microsoft e Qdrant), armazena no vault interno e retorna a instância congelada. |
+| `getSecrets(tenantId: string): TenantSecretBundle \| undefined` | Para recuperar secrets previamente capturados ao montar contexto ou executar integrações. | Busca no vault em memória e retorna bundle (imutável) com segredos Microsoft/Qdrant ou `undefined` quando inexistente. |
 | `clearSecrets(tenantId: string): void` | Quando um tenant é desativado/rotacionado e os secrets não devem permanecer em memória. | Remove a entrada correspondente no vault. |
 
 ### `TenantWorkspaceRunner`
@@ -232,9 +232,10 @@ Módulo global NestJS que disponibiliza todos os serviços acima via injeção d
 | Type | Quando usar | Propriedades relevantes |
 | --- | --- | --- |
 | `TenantMicrosoftConfig` | Representar configuração Microsoft Graph de um tenant sempre que dados completos (incluindo secret opcional) forem necessários para autenticação OAuth. | `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET?`, `GRAPH_REDIRECT_URI?`, `GRAPH_SCOPE?`. |
-| `TenantDoc` | Mapear o documento persistido no Firestore, normalmente retornado por `TenantService.getTenantById`/`getWorkspaceByMicrosoft`. | `id`, `db`, `name?`, `active?`, `microsoft?`. |
-| `TenantSnapshot` | Compartilhar informações de tenant com segurança (sem secrets) entre handlers/contexto. | Mesmos campos de `TenantDoc`, mas com `microsoft` sem `GRAPH_CLIENT_SECRET`. |
-| `TenantSecretBundle` | Armazenar de forma imutável secrets sensíveis capturados pelo `TenantSecretVaultService`. | `microsoft?.clientSecret` (`KeyObject`). |
+| `TenantQdrantConfig` | Descrever a configuração da integração com o Qdrant persistida por tenant. | `QDRANT_URL`, `QDRANT_API_KEY?`. |
+| `TenantDoc` | Mapear o documento persistido no Firestore, normalmente retornado por `TenantService.getTenantById`/`getWorkspaceByMicrosoft`. | `id`, `db`, `name?`, `active?`, `microsoft?`, `qdrant?`. |
+| `TenantSnapshot` | Compartilhar informações de tenant com segurança (sem secrets) entre handlers/contexto. | Mesmos campos de `TenantDoc`, mas com `microsoft` sem `GRAPH_CLIENT_SECRET` e `qdrant` sem `QDRANT_API_KEY`. |
+| `TenantSecretBundle` | Armazenar de forma imutável secrets sensíveis capturados pelo `TenantSecretVaultService`. | `microsoft?.clientSecret` (`KeyObject`), `qdrant?.apiKey` (`KeyObject`). |
 
 ### Resolução e contexto
 | Type | Quando usar | Propriedades relevantes |

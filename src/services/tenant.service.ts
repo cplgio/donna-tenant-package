@@ -295,7 +295,10 @@ export class TenantService {
     metadata: TenantContextMetadata,
   ): Promise<TenantContextSnapshot> {
     await this.ensureSecretBundle(tenant);
-    const safeTenant = tenant.microsoft?.GRAPH_CLIENT_SECRET
+    const requiresSanitization = Boolean(
+      tenant.microsoft?.GRAPH_CLIENT_SECRET || tenant.qdrant?.QDRANT_API_KEY,
+    );
+    const safeTenant = requiresSanitization
       ? this.secretVault.sanitizeTenant(tenant)
       : (tenant as TenantContextSnapshot['tenant']);
     const secrets =
@@ -323,7 +326,7 @@ export class TenantService {
       return;
     }
 
-    if (tenant.microsoft?.GRAPH_CLIENT_SECRET) {
+    if (tenant.microsoft?.GRAPH_CLIENT_SECRET || tenant.qdrant?.QDRANT_API_KEY) {
       this.secretVault.captureFromTenant(tenant);
       return;
     }
