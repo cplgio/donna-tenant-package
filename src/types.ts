@@ -11,16 +11,23 @@ export interface TenantMicrosoftConfig {
   GRAPH_SCOPE?: string;
 }
 
+export interface TenantQdrantConfig {
+  QDRANT_URL: string;
+  QDRANT_API_KEY?: string;
+}
+
 export interface TenantDoc {
   id: string;
   name?: string;
   active?: boolean;
   db: string;
   microsoft?: TenantMicrosoftConfig;
+  qdrant?: TenantQdrantConfig;
 }
 
-export type TenantSnapshot = Omit<TenantDoc, 'microsoft'> & {
+export type TenantSnapshot = Omit<TenantDoc, 'microsoft' | 'qdrant'> & {
   readonly microsoft?: Omit<TenantMicrosoftConfig, 'GRAPH_CLIENT_SECRET'>;
+  readonly qdrant?: Omit<TenantQdrantConfig, 'QDRANT_API_KEY'>;
 };
 
 export interface ResolveInput {
@@ -53,5 +60,8 @@ export interface TenantContextState extends TenantContextSnapshot {
 export interface TenantSecretBundle {
   readonly microsoft?: {
     readonly clientSecret: KeyObject;
+  };
+  readonly qdrant?: {
+    readonly apiKey: KeyObject;
   };
 }

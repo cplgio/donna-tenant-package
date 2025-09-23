@@ -15,6 +15,7 @@ import type {
 const cloneTenant = (tenant: TenantSnapshot): TenantSnapshot => ({
   ...tenant,
   microsoft: tenant.microsoft ? { ...tenant.microsoft } : undefined,
+  qdrant: tenant.qdrant ? { ...tenant.qdrant } : undefined,
 });
 
 @Injectable()

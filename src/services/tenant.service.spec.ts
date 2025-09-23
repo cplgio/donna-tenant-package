@@ -32,6 +32,10 @@ describe('TenantService.createWorkspaceHandler', () => {
       GRAPH_CLIENT_ID: 'client-id',
       GRAPH_CLIENT_SECRET: 'secret-value',
     },
+    qdrant: {
+      QDRANT_URL: 'https://qdrant.local',
+      QDRANT_API_KEY: 'qdrant-secret',
+    },
   };
 
   let tenantService: TenantService;
@@ -155,12 +159,15 @@ describe('TenantService.createWorkspaceHandler', () => {
       assert.equal(tenantSnapshot.id, tenant.id);
       assert.equal(tenantSnapshot.microsoft?.GRAPH_TENANT_ID, workspaceTenantId);
       assert.ok(!('GRAPH_CLIENT_SECRET' in (tenantSnapshot.microsoft ?? {})));
+      assert.equal(tenantSnapshot.qdrant?.QDRANT_URL, tenant.qdrant?.QDRANT_URL);
+      assert.ok(!('QDRANT_API_KEY' in (tenantSnapshot.qdrant ?? {})));
       assert.strictEqual(getPrismaClient(), prisma);
       assert.deepEqual(getMetadata(), {
         source: 'workspaceTenantId',
         identifier: workspaceTenantId,
       });
       assert.strictEqual(getSecrets(), capturedSecrets);
+      assert.ok(capturedSecrets.qdrant?.apiKey);
       return 'success';
     });
 
