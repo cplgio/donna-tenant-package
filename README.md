@@ -1,36 +1,98 @@
-# @donna/tenancy · Technical Reference
+# @donna/tenancy · Guia Completo de Integração
 
-## Overview
-`@donna/tenancy` centralises multi-tenant plumbing for aDonna services built with NestJS and Prisma. The package exposes a NestJS module, runtime helpers, caching utilities, and strongly typed services for resolving tenants, pooling Prisma clients, and managing execution context.
+## Visão Geral
+`@donna/tenancy` centraliza toda a infraestrutura multi-tenant utilizada pelos serviços Donna construídos com **NestJS** e **Prisma**. O pacote disponibiliza um módulo NestJS global, serviços de resolução de tenant, gerenciamento de pools do Prisma, isolamento de contexto via `AsyncLocalStorage`, helpers para handlers de workspace e tipos fortemente tipados que simplificam a integração com filas, jobs, webhooks e APIs HTTP.
 
-## Table of Contents
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Prisma schema](#prisma-schema)
-- [Runtime Helper](#runtime-helper)
-- [Workspace handler factory](#workspace-handler-factory)
-- [NestJS Module](#nestjs-module)
-- [Services](#services)
-  - [TenantService](#tenantservice)
-  - [TenantCacheService](#tenantcacheservice)
-  - [PrismaPoolService](#prismapoolservice)
-  - [TenantContextService](#tenantcontextservice)
-  - [TenantSecretVaultService](#tenantsecretvaultservice)
-- [Types](#types)
-  - [Tenant structures](#tenant-structures)
-  - [Resolution and context](#resolution-and-context)
-  - [Workspace helper](#workspace-helper)
-- [Constants](#constants)
-- [Development Scripts](#development-scripts)
+O objetivo deste guia é servir como um "read absurdo de detalhado" para equipes consumidoras. A documentação cobre:
 
-## Installation
+- Configuração e variáveis de ambiente.
+- Reutilização do `schema.prisma` publicado pelo pacote.
+- Integração passo a passo em uma aplicação NestJS.
+- Fluxos recomendados para requisições HTTP, consumidores de filas e scripts.
+- Referência completa de todas as funções públicas expostas pelos serviços e helpers.
+- Tipos importantes para tipar DTOs, providers e interceptors.
+
+---
+
+## Índice
+1. [Instalação](#instalação)
+2. [Configuração de ambiente](#configuração-de-ambiente)
+3. [Prisma schema compartilhado](#prisma-schema-compartilhado)
+4. [Quickstart NestJS](#quickstart-nestjs)
+5. [Fluxos práticos](#fluxos-práticos)
+6. [Referência de serviços](#referência-de-serviços)
+   - [TenantService](#tenantservice)
+   - [TenantCacheService](#tenantcacheservice)
+   - [PrismaPoolService](#prismapoolservice)
+   - [TenantContextService](#tenantcontextservice)
+   - [TenantSecretVaultService](#tenantsecretvaultservice)
+7. [Helpers de runtime](#helpers-de-runtime)
+8. [Tipos exportados](#tipos-exportados)
+9. [Tokens de injeção e constantes](#tokens-de-injeção-e-constantes)
+10. [Boas práticas e troubleshooting](#boas-práticas-e-troubleshooting)
+11. [Scripts de desenvolvimento](#scripts-de-desenvolvimento)
+
+---
+
+## Instalação
 ```bash
 npm install @donna/tenancy
 ```
 
-Register the provided module inside your NestJS root module to make every service available through dependency injection.
+O pacote é compatível com **NestJS 9+** e **Prisma 5+**. Não é necessário instalar `firebase-admin`, `@prisma/client` ou `ioredis` manualmente, pois eles já são dependências do pacote.
+
+---
+
+## Configuração de ambiente
+Antes de inicializar a aplicação NestJS, configure as variáveis de ambiente abaixo.
+
+| Variável | Obrigatório? | Descrição |
+| --- | --- | --- |
+| `FIREBASE_PROJECT_ID` | ✅ | Projeto Firebase que armazena os documentos de tenants.
+| `FIREBASE_CLIENT_EMAIL` | ✅ | E-mail do service account utilizado para autenticação.
+| `FIREBASE_PRIVATE_KEY` | ✅ | Chave privada do service account. Garanta que os `\n` sejam convertidos para quebras de linha reais.
+| `REDIS_URL` | ⚙️ | URL de conexão do Redis utilizado como cache distribuído. Quando omitido, o cache funciona apenas em memória.
+| `TENANT_CACHE_TTL_SECONDS` | ⚙️ | TTL (segundos) aplicado às entradas de tenant no cache. Default: `3600`.
+| `TENANT_PRISMA_CACHE_TTL_MS` | ⚙️ | TTL (ms) para expirar conexões no pool de Prisma. Default: `1_800_000` (30 minutos).
+| `TENANT_PRISMA_CACHE_MAX` | ⚙️ | Limite máximo de Prisma Clients ativos simultaneamente. Default: `20`.
+
+> ℹ️ **Boas práticas**: carregue todas as variáveis usando um `ConfigModule` do NestJS e valide com `class-validator` ou `zod` antes de registrar o `TenantModule`.
+
+---
+
+## Prisma schema compartilhado
+O pacote publica o schema oficial de dados Donna em `@donna/tenancy/prisma/schema.prisma`. Isso permite reaproveitar o mesmo schema em todas as APIs sem duplicação.
+
+### Como utilizar
+1. Remova o `schema.prisma` do seu projeto consumidor.
+2. Atualize os scripts do `package.json` para apontar para o schema publicado:
+
+```jsonc
+// package.json da API
+{
+  "scripts": {
+    "prisma:generate": "prisma generate --schema node_modules/@donna/tenancy/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate deploy --schema node_modules/@donna/tenancy/prisma/schema.prisma"
+  }
+}
+```
+
+3. Opcionalmente, defina `PRISMA_SCHEMA_PATH` para simplificar a execução manual:
+
+```bash
+export PRISMA_SCHEMA_PATH=node_modules/@donna/tenancy/prisma/schema.prisma
+npx prisma generate
+```
+
+> ✅ Os artefatos publicados incluem o diretório `prisma/`, garantindo que o schema esteja disponível em ambientes de CI/CD e builds Docker.
+
+---
+
+## Quickstart NestJS
+A seguir um exemplo minimalista de como registrar o módulo e utilizar os serviços no contexto de uma API NestJS.
 
 ```ts
+// app.module.ts
 import { Module } from '@nestjs/common';
 import { TenantModule } from '@donna/tenancy';
 
@@ -40,233 +102,236 @@ import { TenantModule } from '@donna/tenancy';
 export class AppModule {}
 ```
 
-## Configuration
-Set the following environment variables before bootstrapping your NestJS application.
+### Consumindo o serviço em um controller
+```ts
+// Services
+import { Injectable } from '@nestjs/common';
+import { TenantService } from '@donna/tenancy';
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `FIREBASE_PROJECT_ID` | Yes | Firebase project identifier that stores tenant metadata. |
-| `FIREBASE_CLIENT_EMAIL` | Yes | Service account client email used to authenticate with Firestore. |
-| `FIREBASE_PRIVATE_KEY` | Yes | Base64 or escaped private key used by the service account; ensure `\n` characters are converted to new lines. |
-| `REDIS_URL` | No | Connection URL for Redis caching. Leave unset to disable Redis-backed caching. |
-| `TENANT_CACHE_TTL_SECONDS` | No | Time-to-live (seconds) applied when caching tenant documents. Defaults to `3600`. |
-| `TENANT_PRISMA_CACHE_TTL_MS` | No | TTL (milliseconds) used by the Prisma client pool. Defaults to `1800000`. |
-| `TENANT_PRISMA_CACHE_MAX` | No | Maximum number of pooled Prisma clients. Defaults to `20`. |
+@Injectable()
+export class WorkspaceReportService {
+  constructor(private readonly tenantService: TenantService) {}
 
-## Prisma schema
-`@donna/tenancy` distribui o schema Prisma oficial do ecossistema Donna no caminho `@donna/tenancy/prisma/schema.prisma`. Isso
-permite que APIs consumidoras reutilizem o modelo compartilhado sem precisar manter uma cópia local de `schema.prisma`.
-
-### Quando usar
-- Para gerar o Prisma Client da sua API durante `postinstall` ou pipelines de CI/CD sem duplicar o schema.
-- Para rodar migrações locais apontando diretamente para o schema publicado pelo pacote multi-tenant.
-
-### Como referenciar o schema publicado
-```jsonc
-// package.json da API consumidora
-{
-  "scripts": {
-    "prisma:generate": "prisma generate --schema node_modules/@donna/tenancy/prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate deploy --schema node_modules/@donna/tenancy/prisma/schema.prisma"
+  async generate(workspaceTenantId: string) {
+    return this.tenantService.runWithWorkspaceContext(
+      workspaceTenantId,
+      async ({ getPrismaClient }) => {
+        const prisma = getPrismaClient();
+        return prisma.report.findMany({ take: 50 });
+      },
+    );
   }
 }
 ```
 
-Você também pode apontar o Prisma CLI para o schema compartilhado via variável de ambiente:
+### Configurando Swagger e validação
+Ao integrar o módulo de tenancy, continue seguindo o padrão NestJS de expor Swagger e aplicar `ValidationPipe`. O pacote não interfere nessas configurações.
 
-```bash
-export PRISMA_SCHEMA_PATH="node_modules/@donna/tenancy/prisma/schema.prisma"
-npx prisma generate
-```
+---
 
-> 💡 Após configurar os comandos acima, remova o `schema.prisma` duplicado do projeto consumidor. O pacote publica o arquivo
-> dentro do diretório `prisma/` e o exporta explicitamente, garantindo que `npm`, `pnpm` ou `yarn` incluam o schema no artefato
-> publicado.
+## Fluxos práticos
+### 1. Requisições HTTP autenticadas
+1. Extraia `tenantId` ou `workspaceTenantId` do token/JWT.
+2. Dentro do controller ou service, utilize `tenantService.withTenantContext({ tenantId }, handler)` ou `tenantService.runWithWorkspaceContext(workspaceTenantId, handler)`.
+3. Todos os serviços injetados dentro do handler terão acesso aos getters de contexto (`getPrismaClient`, `getTenant`, etc.) via `TenantContextService`.
 
-## Runtime Helper
-`TenantWorkspaceRunner` exposes a single entry point, `runWithWorkspaceContext`, that executes asynchronous handlers inside a workspace-aware tenant context. The helper wraps `TenantService.runWithWorkspaceContext`, adds optional logging, and preserves existing context when one is already active.
+### 2. Consumidor de filas / workers
+Para handlers reutilizáveis (RabbitMQ, BullMQ, etc.), prefira `tenantService.createWorkspaceHandler` ou construa uma função com `createWorkspacePayloadRunner` (helper manual). Exemplos completos estão na seção [Helpers de runtime](#helpers-de-runtime).
 
-### Signature
-```ts
-runWithWorkspaceContext<T>(
-  tenantService: TenantService,
-  workspaceTenantId: string,
-  handler: TenantWorkspaceHandler<T> | TenantWorkspaceCallback<T>,
-  options?: TenantWorkspaceRunnerOptions,
-): Promise<T>
-```
+### 3. Scripts externos (Node puro)
+Use o helper estático `TenantWorkspaceRunner.run` para executar handlers sem precisar do ecossistema NestJS completo. Injete `TenantService` a partir do módulo NestJS ou construa um contexto manualmente usando a factory do Nest.
 
-### Parameters
-| Name | Description |
-| --- | --- |
-| `tenantService` | `TenantService` instance resolved through NestJS dependency injection. |
-| `workspaceTenantId` | Microsoft tenant identifier of the workspace to resolve. |
-| `handler` | Async callback executed inside the workspace context. Declare a parameter to receive `TenantWorkspaceHandlerContext` accessors (`getTenant`, `getPrismaClient`, `getSecrets`, `getMetadata`). |
-| `options` | Optional logging configuration. |
+### 4. Resolução por usuário
+Quando apenas o `userId` está disponível, utilize `tenantService.withTenantContext({ userId }, handler)` ou `tenantService.getPrismaFor({ userId })`. O serviço faz lookup na coleção `user_tenants` e reaproveita contexto ativo quando existir.
 
-### Options
-| Property | Description |
-| --- | --- |
-| `logger` | Optional NestJS `Logger` (only the `error` method is used). When omitted, no helper-level error logs are emitted. |
-| `contextErrorMessage` | Custom message logged when context preparation fails. Default: `Failed to prepare workspace context for <workspaceTenantId>.` |
-| `handlerErrorMessage` | Custom message logged when the handler throws. Default: `Failed to execute handler within workspace <workspaceTenantId>.` |
+---
 
-### Behaviour
-- Reuses an existing workspace context when one is already active within `AsyncLocalStorage`.
-- Delegates to `TenantService.runWithWorkspaceContext` to resolve tenants, allocate Prisma clients, and run the handler inside `TenantContextService`.
-- Logs helper-level errors only when a logger is provided.
-- Rethrows both context and handler failures so applications remain responsible for retries and observability.
-
-## Workspace handler factory
-`TenantService.createWorkspaceHandler` builds reusable workspace-aware functions that forward to
-`runWithWorkspaceContext`. The factory accepts the same handler signatures (with or without the
-context accessor bag) and optional `TenantWorkspaceRunnerOptions`, returning an async function that
-receives a workspace tenant identifier.
-
-### Creating a handler
-```ts
-const processWorkspace = tenantService.createWorkspaceHandler(
-  async ({ getTenant, getPrismaClient }) => {
-    const tenant = getTenant();
-    const prisma = getPrismaClient();
-    // Handler logic scoped to the resolved workspace context.
-  },
-  {
-    logger,
-    contextErrorMessage: 'Workspace context could not be initialised.',
-    handlerErrorMessage: 'Workspace handler execution failed.',
-  },
-);
-
-await processWorkspace(workspaceTenantId);
-```
-
-### Behaviour
-- Returns a memoised function that can be injected or stored in services for repeated use.
-- Reuses any active workspace context before preparing a new one, matching
-  `runWithWorkspaceContext` semantics.
-- Supports both handler signatures: with access to the context bag or as a plain callback.
-- Centralises logging and messaging through the provided `TenantWorkspaceRunnerOptions`.
-
-## Prisma Modules
-`@donna/tenancy` expõe um módulo especializado para orquestrar conexões Prisma multi-tenant:
-
-| Módulo/Serviço | Responsabilidade | Como usar |
-| --- | --- | --- |
-| `PrismaPoolService` | Gerencia pool de `PrismaClient` por tenant com TTL e política LRU. | Injetado automaticamente via `TenantModule`; pode ser utilizado diretamente quando for necessário obter um Prisma Client compartilhado chamando `getClient(tenantId, dbUrl)`. Geralmente é acessado indiretamente através do `TenantService`. |
-
-## NestJS Module
-### `TenantModule`
-Registers all tenancy services (cache, Prisma pooling, context management, secret vault, workspace runner) as global providers so that any NestJS component can inject them.
-
-## Services
+## Referência de serviços
 ### `TenantService`
-Fachada principal que orquestra a resolução de locatários, o gerenciamento do pool de Prisma Clients, o isolamento de contexto e a execução de handlers multiworkspaces. Todas as funções são assíncronas e idempotentes sempre que possível.
+Fachada principal que orquestra caches, Prisma pool, cofre de segredos e isolamento de contexto.
 
-| Função | Quando usar | Comportamento |
-| --- | --- | --- |
-| `getTenantById(tenantId: string): Promise<TenantDoc>` | Quando você já possui o `tenantId` e precisa recuperar o documento completo do Firestore ou dos caches. | Reutiliza o tenant ativo no contexto atual, faz lookup em cache de memória/Redis e, em último caso, consulta o Firestore e registra o tenant (incluindo secrets) antes de retornar. |
-| `getTenantByWorkspaceId(workspaceTenantId: string): Promise<TenantDoc>` | Quando o identificador do workspace Microsoft é conhecido, mas você só precisa do tenant sanitizado. | Delegado de `getWorkspaceByMicrosoft`; retorna apenas o `TenantDoc` sanitizado após garantir caches e segredos. |
-| `getWorkspaceByMicrosoft(microsoftTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }>` | Use ao preparar pipelines que exigem simultaneamente o tenant e um Prisma Client preparado para o banco configurado. | Reaproveita contexto ativo, consulta cache de mapeamento workspace→tenant, lê Firestore em caso de miss e registra o tenant e Prisma Client no pool antes de devolver ambos. |
-| `getPrismaFor(input: ResolveInput): Promise<PrismaClient>` | Em fluxos que conhecem o `tenantId` ou `userId` e precisam apenas do Prisma Client associado. | Valida o contexto ativo, resolve o tenant (por ID ou usuário) e retorna um Prisma Client do pool compartilhado. Lança erro se nenhum identificador for informado. |
-| `getPrismaByWorkspaceTenantId(workspaceTenantId: string): Promise<{ prisma: PrismaClient; tenant: TenantDoc }>` | Quando é necessário garantir tenant e Prisma Client para um workspace específico sem recriar contexto manualmente. | Reutiliza contexto ativo quando possível ou delega para `getWorkspaceByMicrosoft` com logs consistentes. |
-| `withTenantContext<T>(input: ResolveInput, handler: () => Promise<T>): Promise<T>` | Utilize em pipelines que não dependem de workspaces, mas precisam executar blocos dentro de `AsyncLocalStorage` com o tenant correto. | Preserva o contexto existente que corresponda aos critérios informados; caso contrário, cria `TenantContextSnapshot` e executa o handler com `TenantContextService.runWithTenant`. |
-| `runWithWorkspaceContext<T>(workspaceTenantId: string, handler: TenantWorkspaceHandler<T> \| TenantWorkspaceCallback<T>, options?: TenantWorkspaceRunnerOptions): Promise<T>` | Entrada recomendada para executar handlers voltados a workspaces (jobs, webhooks, filas). | Se o handler não espera contexto e nenhuma `options` é fornecida, usa um caminho otimizado interno; caso contrário, delega para `TenantWorkspaceRunner.run`, oferecendo logging configurável e reaproveitamento de contexto ativo. |
-| `createWorkspaceHandler<T>(handler, options?): (workspaceTenantId: string) => Promise<T>` | Ideal para gerar funções reutilizáveis/injetáveis que encapsulam `runWithWorkspaceContext`. | Retorna função memoizada que aplica as mesmas regras de contexto/logging que `runWithWorkspaceContext`, permitindo armazená-la em serviços ou filas. |
+| Método | Assinatura | Uso recomendado | Comportamento |
+| --- | --- | --- | --- |
+| `getTenantById` | `(tenantId: string) => Promise<TenantDoc>` | Quando o `tenantId` já é conhecido. | Reutiliza contexto ativo, consulta caches (memória/Redis) e, em último caso, Firestore. Garante captura de segredos antes de devolver o tenant.
+| `getTenantByWorkspaceId` | `(workspaceTenantId: string) => Promise<TenantDoc>` | Quando o fluxo parte do tenant Microsoft (workspaces). | Delegado de `getWorkspaceByMicrosoft`, retornando o tenant sanitizado.
+| `getWorkspaceByMicrosoft` | `(microsoftTenantId: string) => Promise<{ tenant: TenantDoc; prisma: PrismaClient }>` | Pipelines que precisam do tenant e de um Prisma Client configurado. | Reaproveita contexto ativo, tenta resolver via cache de workspace→tenant e, se necessário, consulta Firestore e registra tenant/Prisma.
+| `getPrismaFor` | `(input: ResolveInput) => Promise<PrismaClient>` | Resolução genérica quando há `tenantId` **ou** `userId`. | Reutiliza contexto ativo, resolve tenant (por ID ou usuário) e retorna Prisma do pool. Lança erro se nenhum identificador for informado.
+| `getPrismaByWorkspaceTenantId` | `(workspaceTenantId: string) => Promise<{ tenant: TenantDoc; prisma: PrismaClient }>` | Quando é necessário garantir tenant e Prisma para um workspace específico sem lidar com contexto manualmente. | Reaproveita contexto ativo ou delega para `getWorkspaceByMicrosoft`.
+| `withTenantContext` | `(input: ResolveInput, handler: () => Promise<T>) => Promise<T>` | Execução de blocos que exigem `tenantId` ou `userId` mas não dependem de workspace. | Reaproveita contexto ativo compatível e, se necessário, cria `TenantContextSnapshot` via `TenantContextService`.
+| `runWithWorkspaceContext` | `(workspaceTenantId: string, handler: TenantWorkspaceHandler<T> \| TenantWorkspaceCallback<T>, options?) => Promise<T>` | Entrada padrão para jobs, filas e webhooks que usam `workspaceTenantId`. | Utiliza caminho otimizado quando o handler não recebe contexto nem opções; caso contrário, delega para `TenantWorkspaceRunner` com suporte a logging customizado.
+| `createWorkspaceHandler` | `(handler, options?) => (workspaceTenantId: string) => Promise<T>` | Gerar funções reutilizáveis/injetáveis que encapsulam `runWithWorkspaceContext`. | Retorna função memoizada que aplica as mesmas regras de contexto/logging.
 
-> ℹ️ Métodos privados (por exemplo, `runWithWorkspaceContextInternal`, `resolveTenantContext`, `createContextSnapshot`, `getTenantByUserId`) são utilizados internamente para compor as operações públicas acima e não devem ser invocados externamente.
+#### Exemplo: consumidor de fila
+```ts
+// Services
+import { Injectable, Logger } from '@nestjs/common';
+import { RabbitSubscribe } from '@golevelup/nestjs-rabbitmq';
+import { TenantService } from '@donna/tenancy';
+
+@Injectable()
+export class EmailCreateConsumer {
+  private readonly logger = new Logger(EmailCreateConsumer.name);
+  private readonly runner = this.tenantService.createWorkspaceHandler(
+    async ({ getPrismaClient, getTenant }, payload: EmailCreateWorkspacePayload) => {
+      const prisma = getPrismaClient();
+      const tenant = getTenant();
+      await prisma.email.upsert({
+        where: { id: payload.id },
+        create: {
+          id: payload.id,
+          tenantId: tenant.id,
+          workspaceTenantId: payload.workspaceTenantId,
+        },
+        update: {},
+      });
+    },
+    { logger: this.logger },
+  );
+
+  constructor(private readonly tenantService: TenantService) {}
+
+  @RabbitSubscribe({
+    exchange: 'graph.email',
+    routingKey: 'graph.email.create',
+    queue: 'graph.email.create',
+  })
+  async handle(rawPayload: unknown) {
+    const payload = mapEmailCreateEvent(rawPayload);
+    await this.runner(payload.workspaceTenantId, payload);
+  }
+}
+```
 
 ### `TenantCacheService`
-Cache híbrido (memória + Redis opcional) para metadados de tenants e mapeamentos workspace→tenant.
+Cache híbrido (memória + Redis opcional) responsável por armazenar tenants sanitizados e o mapeamento workspace→tenant.
 
-| Função | Quando usar | Comportamento |
+| Método | Assinatura | Descrição |
 | --- | --- | --- |
-| `getTenant(tenantId: string): Promise<TenantDoc \| null>` | Para recuperar rapidamente tenants sanitizados antes de consultar Firestore. | Verifica cache em memória e, se configurado, tenta Redis (`JSON.parse` do payload) com TTL configurável (`TENANT_CACHE_TTL_SECONDS`). |
-| `setTenant(tenant: TenantDoc, ttlSeconds?: number): Promise<void>` | Após registrar/atualizar tenants, para manter caches consistentes. | Atualiza caches locais, grava Redis com TTL (default 1 hora) e indexa mapeamento `workspaceTenantId → tenantId` quando disponível. |
-| `getTenantIdByWorkspace(workspaceTenantId: string): Promise<string \| null>` | Sempre que você possuir apenas o workspace Microsoft e precisar descobrir o `tenantId`. | Consulta cache de memória e, se necessário, Redis para obter e memorizar o relacionamento. |
-| `invalidateTenant(tenantId: string, workspaceTenantId?: string): Promise<void>` | Para garantir que mudanças críticas em tenants não usem dados antigos. | Remove entradas em memória e Redis, tanto por tenant quanto por workspace (quando informado), falhando de forma tolerante com logs de warning. |
+| `getTenant` | `(tenantId: string) => Promise<TenantDoc \| null>` | Consulta cache em memória e Redis. Retorna `null` em caso de miss.
+| `setTenant` | `(tenant: TenantDoc, ttlSeconds?: number) => Promise<void>` | Persiste o tenant sanitizado nos caches. TTL padrão: 1 hora.
+| `getTenantIdByWorkspace` | `(workspaceTenantId: string) => Promise<string \| null>` | Recupera o `tenantId` associado a um workspace.
+| `invalidateTenant` | `(tenantId: string, workspaceTenantId?: string) => Promise<void>` | Remove entradas de cache (memória e Redis). Tolerante a falhas no Redis.
 
 ### `PrismaPoolService`
-Serviço especializado que atua como "Prisma Module" desta biblioteca, concentrando a criação, reuso e descarte de `PrismaClient` por tenant.
+Gerencia o pool de `PrismaClient` por tenant, aplicando TTL e estratégia LRU.
 
-| Função | Quando usar | Comportamento |
+| Método | Assinatura | Descrição |
 | --- | --- | --- |
-| `getClient(key: string, url: string): Promise<PrismaClient>` | Sempre que um tenant precisa de conexão com banco de dados isolada (geralmente chamado via `TenantService`). | Limpa clientes expirados, reaproveita instância válida existente, cria novo cliente configurando `datasources.db.url` quando necessário e garante política LRU (`TENANT_PRISMA_CACHE_MAX`, `TENANT_PRISMA_CACHE_TTL_MS`). |
+| `getClient` | `(key: string, url: string) => Promise<PrismaClient>` | Reaproveita clientes válidos ou cria novos com `datasources.db.url` ajustado. Expira instâncias com base em TTL/limite configurados.
 
 ### `TenantContextService`
-Wrapper de `AsyncLocalStorage` responsável por disponibilizar snapshot imutável do tenant durante a execução.
+Wrapper de `AsyncLocalStorage` que armazena `TenantContextSnapshot` para disponibilizar dados imutáveis durante a execução.
 
-| Função | Quando usar | Comportamento |
+| Método | Assinatura | Descrição |
 | --- | --- | --- |
-| `runWithTenant<T>(snapshot: TenantContextSnapshot, handler: () => Promise<T>): Promise<T>` | Para executar blocos de código garantindo acesso a tenant, Prisma, metadata e segredos via contexto. | Congela os dados recebidos, injeta-os no `AsyncLocalStorage` e executa o handler, logando erros não tratados antes de propagá-los. |
-| `getContext(): TenantContextState \| undefined` | Ao inspecionar se existe contexto ativo (por exemplo, em interceptors). | Retorna snapshot imutável ou `undefined` quando não houver contexto vigente. |
-| `isActive(): boolean` | Checagens rápidas para condicionar lógica baseada em contexto. | Retorna `true` quando `getContext()` possui valor. |
-| `getTenant(): TenantSnapshot` | Em handlers que precisam do tenant sanitizado atualmente ativo. | Lança erro se nenhum contexto estiver disponível. |
-| `getPrismaClient(): PrismaClient` | Quando for necessário acessar o Prisma Client associado ao contexto vigente. | Recupera o Prisma do snapshot, lançando erro se usado fora de contexto. |
-| `getMetadata(): TenantContextMetadata` | Para obter informações sobre a origem do contexto (tenantId, userId, workspace, etc.). | Retorna o objeto imutável definido em `TenantContextSnapshot.metadata`. |
-| `getSecrets(): TenantSecretBundle` | Quando for preciso acessar segredos capturados para o tenant corrente. | Retorna bundle congelado armazenado pelo `TenantSecretVaultService` ou lança erro se não houver contexto. |
+| `runWithTenant` | `(snapshot: TenantContextSnapshot, handler: () => Promise<T>) => Promise<T>` | Injeta o snapshot no `AsyncLocalStorage` e executa o handler.
+| `getContext` | `() => TenantContextState \| undefined` | Retorna o contexto atual, quando houver.
+| `isActive` | `() => boolean` | Indica se existe contexto ativo.
+| `getTenant` | `() => TenantSnapshot` | Recupera o tenant sanitizado do contexto. Lança erro quando não há contexto.
+| `getPrismaClient` | `() => PrismaClient` | Retorna o Prisma Client do contexto.
+| `getMetadata` | `() => TenantContextMetadata` | Informa a origem (`tenantId`, `userId`, `workspaceTenantId`, etc.).
+| `getSecrets` | `() => TenantSecretBundle` | Devolve bundle imutável de segredos capturados.
 
 ### `TenantSecretVaultService`
-Responsável por isolar informações sensíveis de cada tenant e fornecer snapshots seguros para o restante da aplicação.
+Cofre em memória que mantém secrets sensíveis fora do snapshot compartilhado.
 
-| Função | Quando usar | Comportamento |
+| Método | Assinatura | Descrição |
 | --- | --- | --- |
-| `sanitizeTenant(tenant: TenantDoc): TenantSnapshot` | Antes de compartilhar dados de tenant com consumidores que não devem ver segredos. | Remove `GRAPH_CLIENT_SECRET`, preserva `qdrant` exatamente como registrado (incluindo `QDRANT_API_KEY`) e retorna um `TenantSnapshot` seguro com objetos internos congelados. |
-| `captureFromTenant(tenant: TenantDoc): TenantSecretBundle` | Ao registrar/atualizar tenants contendo secrets que precisam ser reutilizados. | Constrói `TenantSecretBundle` com `KeyObject` derivado dos secrets (Microsoft e Qdrant), armazena no vault interno e retorna a instância congelada. |
-| `getSecrets(tenantId: string): TenantSecretBundle \| undefined` | Para recuperar secrets previamente capturados ao montar contexto ou executar integrações. | Busca no vault em memória e retorna bundle (imutável) com segredos Microsoft/Qdrant ou `undefined` quando inexistente. |
-| `clearSecrets(tenantId: string): void` | Quando um tenant é desativado/rotacionado e os secrets não devem permanecer em memória. | Remove a entrada correspondente no vault. |
+| `sanitizeTenant` | `(tenant: TenantDoc) => TenantSnapshot` | Remove `GRAPH_CLIENT_SECRET` e expõe o bloco de Qdrant conforme persistido (incluindo `QDRANT_API_KEY`, quando presente). Objetos internos são congelados.
+| `captureFromTenant` | `(tenant: TenantDoc) => TenantSecretBundle` | Constrói bundle imutável com `KeyObject` para secrets Microsoft e Qdrant.
+| `getSecrets` | `(tenantId: string) => TenantSecretBundle \| undefined` | Recupera bundle previamente capturado.
+| `clearSecrets` | `(tenantId: string) => void` | Remove segredos do cofre.
 
-> 🔎 **Formato exposto**
-> - `tenantSnapshot.microsoft` remove apenas `GRAPH_CLIENT_SECRET` e mantém os demais campos (`GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_REDIRECT_URI?`, `GRAPH_SCOPE?`) exatamente como persistidos no Firestore.
-> - `tenantSnapshot.qdrant` é exposto sem alterações: `{ QDRANT_URL, QDRANT_API_KEY? }`, permitindo que consumidores reutilizem a URL e a chave API do Qdrant tal como armazenadas na coleção.
+> ⚠️ **Importante**: como `TenantSnapshot.qdrant` preserva `QDRANT_API_KEY`, evite serializar snapshots sanitizados para logs ou respostas HTTP. Utilize DTOs específicos quando necessário.
 
+---
+
+## Helpers de runtime
 ### `TenantWorkspaceRunner`
-Helper de runtime que pode ser usado fora do ecossistema NestJS (por exemplo, em scripts Node). Também está exposto como `runWithWorkspaceContext` via re-export.
+Disponibiliza helpers para execução de handlers multi-tenant fora do NestJS.
 
-| Função | Quando usar | Comportamento |
+| Função | Assinatura | Uso |
 | --- | --- | --- |
-| `TenantWorkspaceRunner.run<T>(tenantService, workspaceTenantId, handler, options?)` | Ao precisar executar handlers multitenant com controle explícito sobre dependências (útil em testes ou ambientes utilitários). | Localiza o runner interno de `TenantService`, garante acesso ao `TenantContextService` e executa o handler com criação/reuso de contexto, enriquecendo logs de erro com mensagens customizadas quando fornecidas. |
-| `runWithWorkspaceContext` | Alias direto de `TenantWorkspaceRunner.run`. | Mesmo comportamento descrito acima. |
+| `TenantWorkspaceRunner.run` | `(tenantService: TenantService, workspaceTenantId: string, handler: TenantWorkspaceHandler<T> \| TenantWorkspaceCallback<T>, options?: TenantWorkspaceRunnerOptions) => Promise<T>` | Executa handler aplicando resolução de workspace, caching e logging customizável.
+| `runWithWorkspaceContext` | Alias exposto diretamente pelo pacote. Assinatura idêntica a `TenantWorkspaceRunner.run`.
 
-### `TenantModule`
-Módulo global NestJS que disponibiliza todos os serviços acima via injeção de dependência. Inclui providers para Firestore, Redis (opcional) e para os serviços Prisma/Cache/Context/Vault/Tenant. Registre-o uma única vez no `AppModule` para evitar múltiplas inicializações do Firebase Admin SDK.
+### `createWorkspacePayloadRunner` (helper opcional)
+Exemplo de helper interno que encapsula payloads adicionais:
 
-## Types
-### Estruturas de tenant
-| Type | Quando usar | Propriedades relevantes |
-| --- | --- | --- |
-| `TenantMicrosoftConfig` | Representar configuração Microsoft Graph de um tenant sempre que dados completos (incluindo secret opcional) forem necessários para autenticação OAuth. | `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET?`, `GRAPH_REDIRECT_URI?`, `GRAPH_SCOPE?`. |
-| `TenantQdrantConfig` | Descrever a configuração da integração com o Qdrant persistida por tenant. | `QDRANT_URL`, `QDRANT_API_KEY?`. |
-| `TenantDoc` | Mapear o documento persistido no Firestore, normalmente retornado por `TenantService.getTenantById`/`getWorkspaceByMicrosoft`. | `id`, `db`, `name?`, `active?`, `microsoft?`, `qdrant?`. |
-| `TenantSnapshot` | Compartilhar informações de tenant com segurança (sem secrets) entre handlers/contexto. | Mesmos campos de `TenantDoc`, mas com `microsoft` sem `GRAPH_CLIENT_SECRET` e `qdrant` preservado exatamente como registrado (incluindo `QDRANT_API_KEY`). |
-| `TenantSecretBundle` | Armazenar de forma imutável secrets sensíveis capturados pelo `TenantSecretVaultService`. | `microsoft?.clientSecret` (`KeyObject`), `qdrant?.apiKey` (`KeyObject`). |
+```ts
+export function createWorkspacePayloadRunner<TPayload extends WorkspacePayload, TResult>(
+  tenantService: TenantService,
+  handler: (context: TenantWorkspaceHandlerContext, payload: TPayload) => Promise<TResult>,
+  options?: TenantWorkspaceRunnerOptions | ((payload: TPayload) => TenantWorkspaceRunnerOptions | undefined),
+): (payload: TPayload) => Promise<TResult> {
+  return async (payload: TPayload) => {
+    const resolvedOptions = typeof options === 'function' ? options(payload) : options;
+    const wrappedHandler: TenantWorkspaceHandler<TResult> = (context) => handler(context, payload);
+    return tenantService.runWithWorkspaceContext(
+      payload.workspaceTenantId,
+      wrappedHandler,
+      resolvedOptions,
+    );
+  };
+}
+```
 
-### Resolução e contexto
-| Type | Quando usar | Propriedades relevantes |
-| --- | --- | --- |
-| `ResolveInput` | Entrada aceita por `TenantService.withTenantContext` e `TenantService.getPrismaFor` para indicar como resolver o tenant. | `tenantId?`, `userId?`. |
-| `TenantContextSource` | Controlar a origem do contexto ativo para fins de auditoria e depuração. | Valores literais: `'tenantId'`, `'userId'`, `'workspaceTenantId'`, `'microsoftTenantId'`. |
-| `TenantContextMetadata` | Metadados imutáveis anexados ao snapshot de contexto para identificar quem originou a resolução. | `source: TenantContextSource`, `identifier: string`. |
-| `TenantContextSnapshot` | Estrutura consumida por `TenantContextService.runWithTenant` ao inicializar um contexto. | `tenant: TenantSnapshot`, `prisma: PrismaClient`, `metadata: TenantContextMetadata`, `secrets: TenantSecretBundle`. |
-| `TenantContextState` | Representação enriquecida armazenada no `AsyncLocalStorage`, disponibilizada pelos getters do `TenantContextService`. | Todos os campos de `TenantContextSnapshot` + `createdAt: Date`. |
+---
 
-### Workspace helper
-| Type | Quando usar | Propriedades relevantes |
-| --- | --- | --- |
-| `TenantWorkspaceRunnerOptions` | Customizar mensagens e logging de `runWithWorkspaceContext`/`TenantWorkspaceRunner.run`. | `logger?: Pick<Logger, 'error'>`, `contextErrorMessage?`, `handlerErrorMessage?`. |
-| `TenantWorkspaceHandlerContext` | Acessar `tenant`, `prisma`, `secrets` e `metadata` dentro de handlers que recebem contexto explícito. | Métodos: `getTenant()`, `getPrismaClient()`, `getSecrets()`, `getMetadata()`. |
-| `TenantWorkspaceHandler<T>` | Declarar handlers que recebem o contexto explícito. | Assinatura: `(context: TenantWorkspaceHandlerContext) => Promise<T>`. |
-| `TenantWorkspaceCallback<T>` | Declarar handlers que não precisam do contexto explícito, apenas executam lógica assíncrona. | Assinatura: `() => Promise<T>`. |
-
-## Constants
-| Constant | Value | Purpose |
-| --- | --- | --- |
-| `FIRESTORE_PROVIDER` | `'TENANCY_FIRESTORE'` | Injection token used to expose the Firestore client. |
-| `REDIS_PROVIDER` | `'TENANCY_REDIS'` | Injection token used to expose a Redis instance. |
-
-## Development Scripts
-| Command | Description |
+## Tipos exportados
+| Tipo | Descrição |
 | --- | --- |
-| `npm run build` | Cleans the `dist` directory and builds both ESM and CJS bundles. |
-| `npm run build:test` | Compiles TypeScript specs into `dist/test`. |
-| `npm test` | Compiles tests and runs them with the Node.js test runner. |
+| `TenantMicrosoftConfig` | Configuração do Microsoft Graph (`GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET?`, `GRAPH_REDIRECT_URI?`, `GRAPH_SCOPE?`). |
+| `TenantQdrantConfig` | Configuração do Qdrant (`QDRANT_URL`, `QDRANT_API_KEY?`). |
+| `TenantDoc` | Documento completo do tenant no Firestore (`id`, `db`, `name?`, `active?`, `microsoft?`, `qdrant?`). |
+| `TenantSnapshot` | Versão sanitizada compartilhada no contexto (sem `GRAPH_CLIENT_SECRET`). O bloco `qdrant` mantém `QDRANT_API_KEY?`. |
+| `TenantSecretBundle` | Secrets imutáveis (`microsoft?.clientSecret`, `qdrant?.apiKey`), ambos como `KeyObject`. |
+| `ResolveInput` | Entrada aceita por `getPrismaFor`/`withTenantContext` (`tenantId?`, `userId?`). |
+| `TenantContextSource` | Origem do contexto (`'tenantId' | 'userId' | 'workspaceTenantId' | 'microsoftTenantId'`). |
+| `TenantContextMetadata` | Metadados (`source`, `identifier`). |
+| `TenantContextSnapshot` | Estrutura utilizada para iniciar contextos (`tenant`, `prisma`, `metadata`, `secrets`). |
+| `TenantContextState` | Snapshot enriquecido com `createdAt`. |
+| `TenantWorkspaceRunnerOptions` | Configuração para runners (`logger?: Pick<Logger, 'error'>`, `contextErrorMessage?`, `handlerErrorMessage?`). |
+| `TenantWorkspaceHandlerContext` | Bag de acessores (`getTenant`, `getPrismaClient`, `getSecrets`, `getMetadata`). |
+| `TenantWorkspaceHandler<T>` | Handler que recebe contexto explícito. |
+| `TenantWorkspaceCallback<T>` | Handler sem parâmetros (contexto implícito). |
+
+---
+
+## Tokens de injeção e constantes
+| Constante | Valor | Uso |
+| --- | --- | --- |
+| `FIRESTORE_PROVIDER` | `'TENANCY_FIRESTORE'` | Token do NestJS para injetar o cliente Firestore configurado. |
+| `REDIS_PROVIDER` | `'TENANCY_REDIS'` | Token para injetar o cliente Redis, quando configurado. |
+
+---
+
+## Boas práticas e troubleshooting
+- **Validação de entrada**: utilize DTOs com `class-validator` nos seus controllers e converta `tenantId`/`workspaceTenantId` para string antes de repassar ao `TenantService`.
+- **Observabilidade**: os serviços utilizam `Logger` do NestJS para logs críticos. Injete um logger nos runners quando precisar de mensagens específicas.
+- **Rotação de segredos**: após atualizar secrets no Firestore, chame `tenantCacheService.invalidateTenant(tenantId)` para forçar recaptura.
+- **Limpeza de contexto**: sempre execute operações sensíveis dentro de `withTenantContext`/`runWithWorkspaceContext` para garantir isolamento. Evite armazenar snapshots em variáveis globais.
+- **Serialização**: nunca retorne `TenantSnapshot` diretamente em respostas HTTP se o bloco `qdrant` contiver `QDRANT_API_KEY`. Crie DTOs específicos e omita a chave.
+- **Testes**: ao testar serviços, você pode mockar `TenantContextService` para injetar snapshots customizados ou usar `TenantWorkspaceRunner.run` com um `TenantService` real.
+
+### Checklist de implantação
+1. Configurar variáveis de ambiente obrigatórias (Firebase + banco de dados).
+2. Atualizar scripts do Prisma para usar o schema compartilhado.
+3. Registrar `TenantModule` no `AppModule`.
+4. Criar interceptors/guards para extrair `tenantId`/`workspaceTenantId` das requisições.
+5. Utilizar `withTenantContext` ou `runWithWorkspaceContext` em todos os serviços que acessam o Prisma.
+6. Configurar Swagger e DTOs validados para documentar endpoints multi-tenant.
+7. Monitorar logs de erro provenientes do `TenantService` para agir em falhas de resolução.
+
+---
+
+## Scripts de desenvolvimento
+| Comando | Descrição |
+| --- | --- |
+| `npm run build` | Limpa `dist/` e compila os bundles ESM e CJS.
+| `npm run build:test` | Compila os testes TypeScript para `dist/test`.
+| `npm test` | Executa a suíte de testes com o Node.js test runner.
+
+---
+
+> 📚 Necessita de exemplos adicionais? Consulte os testes em `dist/test` após executar `npm run build:test` ou explore a pasta `src/` para entender a implementação completa dos serviços documentados acima.
