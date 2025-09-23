@@ -21,8 +21,7 @@ const cloneWithoutSecrets = (tenant: TenantDoc): TenantSnapshot => {
 
   let safeQdrant: TenantSnapshot['qdrant'];
   if (qdrant) {
-    const { QDRANT_API_KEY: _secret, ...qdrantSafe } = qdrant;
-    safeQdrant = Object.freeze({ ...qdrantSafe }) as TenantSnapshot['qdrant'];
+    safeQdrant = Object.freeze({ ...qdrant }) as TenantSnapshot['qdrant'];
   }
 
   const safeTenant: TenantSnapshot = Object.freeze({

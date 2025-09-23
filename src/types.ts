@@ -27,7 +27,7 @@ export interface TenantDoc {
 
 export type TenantSnapshot = Omit<TenantDoc, 'microsoft' | 'qdrant'> & {
   readonly microsoft?: Omit<TenantMicrosoftConfig, 'GRAPH_CLIENT_SECRET'>;
-  readonly qdrant?: Omit<TenantQdrantConfig, 'QDRANT_API_KEY'>;
+  readonly qdrant?: TenantQdrantConfig;
 };
 
 export interface ResolveInput {
