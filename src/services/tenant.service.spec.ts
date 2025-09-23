@@ -160,7 +160,7 @@ describe('TenantService.createWorkspaceHandler', () => {
       assert.equal(tenantSnapshot.microsoft?.GRAPH_TENANT_ID, workspaceTenantId);
       assert.ok(!('GRAPH_CLIENT_SECRET' in (tenantSnapshot.microsoft ?? {})));
       assert.equal(tenantSnapshot.qdrant?.QDRANT_URL, tenant.qdrant?.QDRANT_URL);
-      assert.ok(!('QDRANT_API_KEY' in (tenantSnapshot.qdrant ?? {})));
+      assert.equal(tenantSnapshot.qdrant?.QDRANT_API_KEY, tenant.qdrant?.QDRANT_API_KEY);
       assert.strictEqual(getPrismaClient(), prisma);
       assert.deepEqual(getMetadata(), {
         source: 'workspaceTenantId',
