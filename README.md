@@ -39,6 +39,27 @@ O objetivo deste guia é servir como um "read absurdo de detalhado" para equipes
 npm install @donna/tenancy
 ```
 
+#### Metadados de emails
+
+O modelo `Email` segue o schema abaixo, alinhado ao payload de metadados processado pelos consumidores:
+
+| Campo | Tipo | Observações |
+| --- | --- | --- |
+| `summary` | `string` | Resumo conciso da mensagem. |
+| `tags` | `string[]` | Lista de categorias para triagem. |
+| `needsReply` | `boolean` | Indica se alguma ação é necessária. |
+| `importance` | `high \| medium \| low` | Importância percebida. |
+| `type` | `string` | Categoria geral da mensagem (ex.: `email`, `support`). |
+| `threadId` | `string` | Identificador de thread para agrupamento. |
+| `detectedEntities` | `string[]` | Entidades extraídas do conteúdo. |
+| `sentiment` | `positive \| neutral \| negative` | Sentimento predominante detectado. |
+| `notify` | `boolean` | Se o usuário deve ser notificado imediatamente. |
+| `notifyTone` | `string` | `positive`, `negative` ou vazio. |
+| `notifyReason` | `string` | Motivo da notificação. |
+| `notifyMessage` | `string` | Mensagem pronta para o usuário. |
+| `shouldEscalate` | `boolean` | Se deve ser escalado para análise avançada. |
+| `isAutomated` | `boolean` | Define se foi gerado automaticamente. |
+
 O pacote é compatível com **NestJS 9+** e **Prisma 5+**. Não é necessário instalar `firebase-admin`, `@prisma/client` ou `ioredis` manualmente, pois eles já são dependências do pacote.
 
 ---
