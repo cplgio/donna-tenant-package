@@ -137,7 +137,11 @@ export class TenantService {
         const tenant = await this.getTenantByUserId(input.userId);
         return await this.getPrismaForTenant(tenant);
       }
-      throw new Error('tenantId or userId required');
+      if (input.userPhoneNumber) {
+        const tenant = await this.getTenantByUserPhoneNumber(input.userPhoneNumber);
+        return await this.getPrismaForTenant(tenant);
+      }
+      throw new Error('tenantId, userId, or userPhoneNumber required');
     } catch (err) {
       this.logger.error('Failed to resolve Prisma client', err as Error);
       throw err;
@@ -264,6 +268,13 @@ export class TenantService {
       );
     }
 
+    if (input.userPhoneNumber) {
+      return (
+        context.metadata.source === 'userPhoneNumber' &&
+        context.metadata.identifier === input.userPhoneNumber
+      );
+    }
+
     return false;
   }
 
@@ -286,7 +297,16 @@ export class TenantService {
       });
     }
 
-    throw new Error('tenantId or userId required');
+    if (input.userPhoneNumber) {
+      const tenant = await this.getTenantByUserPhoneNumber(input.userPhoneNumber);
+      const prisma = await this.getPrismaForTenant(tenant);
+      return await this.createContextSnapshot(tenant, prisma, {
+        source: 'userPhoneNumber',
+        identifier: input.userPhoneNumber,
+      });
+    }
+
+    throw new Error('tenantId, userId, or userPhoneNumber required');
   }
 
   private async createContextSnapshot(
@@ -348,6 +368,30 @@ export class TenantService {
       .get();
     const tenantId = snap.docs[0]?.data()?.tenantId as string | undefined;
     if (!tenantId) throw new Error(`Tenant for user ${userId} not found`);
+    return this.getTenantById(tenantId);
+  }
+
+  private async getTenantByUserPhoneNumber(userPhoneNumber: string): Promise<TenantDoc> {
+    const context = this.tenantContext.getContext();
+    if (
+      context?.metadata.source === 'userPhoneNumber' &&
+      context.metadata.identifier === userPhoneNumber
+    ) {
+      return context.tenant;
+    }
+
+    const snap = await this.firestore
+      .collection('user_tenants')
+      .where('phone', '==', userPhoneNumber)
+      .where('active', '==', true)
+      .limit(1)
+      .get();
+
+    const tenantId = snap.docs[0]?.data()?.tenantId as string | undefined;
+    if (!tenantId) {
+      throw new Error(`Tenant for user phone number ${userPhoneNumber} not found`);
+    }
+
     return this.getTenantById(tenantId);
   }
 }

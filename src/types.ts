@@ -33,11 +33,13 @@ export type TenantSnapshot = Omit<TenantDoc, 'microsoft' | 'qdrant'> & {
 export interface ResolveInput {
   tenantId?: string;
   userId?: string;
+  userPhoneNumber?: string;
 }
 
 export type TenantContextSource =
   | 'tenantId'
   | 'userId'
+  | 'userPhoneNumber'
   | 'workspaceTenantId'
   | 'microsoftTenantId';
 

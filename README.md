@@ -165,6 +165,9 @@ Use o helper estático `TenantWorkspaceRunner.run` para executar handlers sem pr
 ### 4. Resolução por usuário
 Quando apenas o `userId` está disponível, utilize `tenantService.withTenantContext({ userId }, handler)` ou `tenantService.getPrismaFor({ userId })`. O serviço faz lookup na coleção `user_tenants` e reaproveita contexto ativo quando existir.
 
+#### Lookup por telefone
+Para fluxos autenticados apenas pelo número de telefone, utilize `tenantService.withTenantContext({ userPhoneNumber }, handler)` ou `tenantService.getPrismaFor({ userPhoneNumber })`. O pacote consulta `user_tenants.phone` (considerando apenas registros `active: true`) para descobrir o tenant e propaga o contexto automaticamente.
+
 ---
 
 ## Referência de serviços
@@ -176,9 +179,9 @@ Fachada principal que orquestra caches, Prisma pool, cofre de segredos e isolame
 | `getTenantById` | `(tenantId: string) => Promise<TenantDoc>` | Quando o `tenantId` já é conhecido. | Reutiliza contexto ativo, consulta caches (memória/Redis) e, em último caso, Firestore. Garante captura de segredos antes de devolver o tenant.
 | `getTenantByWorkspaceId` | `(workspaceTenantId: string) => Promise<TenantDoc>` | Quando o fluxo parte do tenant Microsoft (workspaces). | Delegado de `getWorkspaceByMicrosoft`, retornando o tenant sanitizado.
 | `getWorkspaceByMicrosoft` | `(microsoftTenantId: string) => Promise<{ tenant: TenantDoc; prisma: PrismaClient }>` | Pipelines que precisam do tenant e de um Prisma Client configurado. | Reaproveita contexto ativo, tenta resolver via cache de workspace→tenant e, se necessário, consulta Firestore e registra tenant/Prisma.
-| `getPrismaFor` | `(input: ResolveInput) => Promise<PrismaClient>` | Resolução genérica quando há `tenantId` **ou** `userId`. | Reutiliza contexto ativo, resolve tenant (por ID ou usuário) e retorna Prisma do pool. Lança erro se nenhum identificador for informado.
+| `getPrismaFor` | `(input: ResolveInput) => Promise<PrismaClient>` | Resolução genérica quando há `tenantId`, `userId` ou `userPhoneNumber`. | Reutiliza contexto ativo, resolve tenant (por ID, usuário ou telefone) e retorna Prisma do pool. Lança erro se nenhum identificador for informado.
 | `getPrismaByWorkspaceTenantId` | `(workspaceTenantId: string) => Promise<{ tenant: TenantDoc; prisma: PrismaClient }>` | Quando é necessário garantir tenant e Prisma para um workspace específico sem lidar com contexto manualmente. | Reaproveita contexto ativo ou delega para `getWorkspaceByMicrosoft`.
-| `withTenantContext` | `(input: ResolveInput, handler: () => Promise<T>) => Promise<T>` | Execução de blocos que exigem `tenantId` ou `userId` mas não dependem de workspace. | Reaproveita contexto ativo compatível e, se necessário, cria `TenantContextSnapshot` via `TenantContextService`.
+| `withTenantContext` | `(input: ResolveInput, handler: () => Promise<T>) => Promise<T>` | Execução de blocos que exigem `tenantId`, `userId` ou `userPhoneNumber` mas não dependem de workspace. | Reaproveita contexto ativo compatível e, se necessário, cria `TenantContextSnapshot` via `TenantContextService`.
 | `runWithWorkspaceContext` | `(workspaceTenantId: string, handler: TenantWorkspaceHandler<T> \| TenantWorkspaceCallback<T>, options?) => Promise<T>` | Entrada padrão para jobs, filas e webhooks que usam `workspaceTenantId`. | Utiliza caminho otimizado quando o handler não recebe contexto nem opções; caso contrário, delega para `TenantWorkspaceRunner` com suporte a logging customizado.
 | `createWorkspaceHandler` | `(handler, options?) => (workspaceTenantId: string) => Promise<T>` | Gerar funções reutilizáveis/injetáveis que encapsulam `runWithWorkspaceContext`. | Retorna função memoizada que aplica as mesmas regras de contexto/logging.
 
@@ -307,8 +310,8 @@ export function createWorkspacePayloadRunner<TPayload extends WorkspacePayload, 
 | `TenantDoc` | Documento completo do tenant no Firestore (`id`, `db`, `name?`, `active?`, `microsoft?`, `qdrant?`). |
 | `TenantSnapshot` | Versão sanitizada compartilhada no contexto (sem `GRAPH_CLIENT_SECRET`). O bloco `qdrant` mantém `QDRANT_API_KEY?`. |
 | `TenantSecretBundle` | Secrets imutáveis (`microsoft?.clientSecret`, `qdrant?.apiKey`), ambos como `KeyObject`. |
-| `ResolveInput` | Entrada aceita por `getPrismaFor`/`withTenantContext` (`tenantId?`, `userId?`). |
-| `TenantContextSource` | Origem do contexto (`'tenantId' | 'userId' | 'workspaceTenantId' | 'microsoftTenantId'`). |
+| `ResolveInput` | Entrada aceita por `getPrismaFor`/`withTenantContext` (`tenantId?`, `userId?`, `userPhoneNumber?`). |
+| `TenantContextSource` | Origem do contexto (`'tenantId' | 'userId' | 'userPhoneNumber' | 'workspaceTenantId' | 'microsoftTenantId'`). |
 | `TenantContextMetadata` | Metadados (`source`, `identifier`). |
 | `TenantContextSnapshot` | Estrutura utilizada para iniciar contextos (`tenant`, `prisma`, `metadata`, `secrets`). |
 | `TenantContextState` | Snapshot enriquecido com `createdAt`. |
