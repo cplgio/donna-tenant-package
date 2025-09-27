@@ -122,6 +122,46 @@ enum FileType {
   VIDEO
 }
 
+// Emails
+model Email {
+  id               String          @id @default(uuid())
+  emailIdExternal  String          @unique
+  userId           String?
+  subject          String
+  body             String
+  from             String
+  to               String[]
+  isRead           Boolean         @default(false)
+  isDraft          Boolean         @default(false)
+  flagged          Boolean         @default(false)
+  importance       EmailImportance @default(medium)
+  threadId         String
+  timestamp        DateTime?
+  webLink          String?
+  openStatus       Boolean         @default(false)
+  tags             String[]        @default([])
+  summary          String?
+  needsReply       Boolean         @default(false)
+  cleanText        String?
+  detectedEntities String[]        @default([])
+  sentiment        EmailSentiment  @default(neutral)
+  notify           Boolean         @default(false)
+  notifyTone       String?
+  notifyReason     String?
+  notifyMessage    String?
+  shouldEscalate   Boolean         @default(false)
+  isAutomated      Boolean         @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relação com User (opcional) com onDelete seguro
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("emails")
+}
+
 enum EmailImportance {
   high
   medium
@@ -134,55 +174,17 @@ enum EmailSentiment {
   negative
 }
 
-// Emails
-model Email {
-  id               String          @id @default(uuid())
-  emailIdExternal  String          @unique @map("email_id_external")
-  userId           String?         @map("user_id")
-  subject          String
-  body             String
-  from             String          @map("from_email")
-  to               String[]        @map("to_emails")
-  isRead           Boolean         @default(false) @map("is_read")
-  isDraft          Boolean         @default(false) @map("is_draft")
-  flagged          Boolean         @default(false)
-  importance       EmailImportance @default(medium)
-  threadId         String          @map("thread_id")
-  timestamp        DateTime?       @map("timestamp")
-  webLink          String?         @map("web_link")
-  openStatus       Boolean         @default(false)
-  tags             String[]        @default([])
-  summary          String?
-  needsReply       Boolean         @default(false) @map("needs_reply")
-  cleanText        String?         @map("clean_text")
-  detectedEntities String[]        @default([]) @map("detected_entities")
-  sentiment        EmailSentiment  @default(neutral)
-  notify           Boolean         @default(false)
-  notifyTone       String?         @map("notify_tone")
-  notifyReason     String?         @map("notify_reason")
-  notifyMessage    String?         @map("notify_message")
-  shouldEscalate   Boolean         @default(false) @map("should_escalate")
-  isAutomated      Boolean         @default(false) @map("is_automated")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relação com User (opcional) com onDelete seguro
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@map("emails")
-}
-
 // Chat history
 model ChatHistory {
-  id         String     @id @default(uuid())
+  id         String          @id @default(uuid())
   whatsappId String
+  messageId  String
+  type       ChatMessageType @default(text)
   message    String
   timestamp  DateTime
   origin     ChatOrigin
   userId     String?
-  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user       User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -196,12 +198,23 @@ enum ChatOrigin {
   donna
 }
 
+enum ChatMessageType {
+  text
+  audio
+  image
+  video
+  document
+  location
+  contact
+  list
+}
+
 // Invites
 model Invite {
   id String @id @default(uuid())
 
-  eventIdExternal String  @unique @map("event_id_external")
-  iCalUId         String? @unique @map("ical_uid")
+  eventIdExternal String  @unique
+  iCalUId         String? @unique
 
   // Básico do evento
   subject String
@@ -209,13 +222,13 @@ model Invite {
 
   start         DateTime
   end           DateTime
-  startTimeZone String?  @map("start_tz")
-  endTimeZone   String?  @map("end_tz")
+  startTimeZone String?
+  endTimeZone   String?
 
   // Local/online
-  locationName    String? @map("location_name")
-  locationAddress String? @map("location_address")
-  isOnlineMeeting Boolean @default(false) @map("is_online")
+  locationName    String?
+  locationAddress String?
+  isOnlineMeeting Boolean @default(false)
   joinUrl         String?
   webLink         String?
 
@@ -223,9 +236,9 @@ model Invite {
   description String?
 
   // Organizador (pode ser interno ou externo)
-  organizerUserId String? @map("organizer_user_id")
-  organizerName   String? @map("organizer_name")
-  organizerEmail  String? @map("organizer_email")
+  organizerUserId String?
+  organizerName   String?
+  organizerEmail  String?
   organizer       User?   @relation(fields: [organizerUserId], references: [id], onDelete: SetNull)
 
   attendees InviteAttendee[]
