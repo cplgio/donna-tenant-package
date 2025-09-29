@@ -290,6 +290,7 @@ enum InviteAttendeeType {
 }
 
 enum InviteResponse {
+  notResponded
   none
   accepted
   declined
