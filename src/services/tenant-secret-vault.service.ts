@@ -1,27 +1,24 @@
 // Dependencies
-import { Injectable, Logger } from '@nestjs/common';
-import { createSecretKey } from 'node:crypto';
+import { Injectable, Logger } from "@nestjs/common";
+import { createSecretKey } from "node:crypto";
 
 // Types
-import type {
-  TenantDoc,
-  TenantSecretBundle,
-  TenantSnapshot,
-} from '../types';
+import type { TenantDoc, TenantSecretBundle, TenantSnapshot } from "../types";
 
 // Utils
 const cloneWithoutSecrets = (tenant: TenantDoc): TenantSnapshot => {
   const { microsoft, qdrant, ...rest } = tenant;
 
-  let safeMicrosoft: TenantSnapshot['microsoft'];
+  let safeMicrosoft: TenantSnapshot["microsoft"];
   if (microsoft) {
-    const { GRAPH_CLIENT_SECRET: _secret, ...microsoftSafe } = microsoft;
-    safeMicrosoft = Object.freeze({ ...microsoftSafe }) as TenantSnapshot['microsoft'];
+    safeMicrosoft = Object.freeze({
+      ...microsoft,
+    }) as TenantSnapshot["microsoft"];
   }
 
-  let safeQdrant: TenantSnapshot['qdrant'];
+  let safeQdrant: TenantSnapshot["qdrant"];
   if (qdrant) {
-    safeQdrant = Object.freeze({ ...qdrant }) as TenantSnapshot['qdrant'];
+    safeQdrant = Object.freeze({ ...qdrant }) as TenantSnapshot["qdrant"];
   }
 
   const safeTenant: TenantSnapshot = Object.freeze({
@@ -50,7 +47,10 @@ export class TenantSecretVaultService {
       this.vault.set(tenant.id, secrets);
       return secrets;
     } catch (error) {
-      this.logger.error(`Failed to create secret bundle for tenant ${tenant.id}`, error as Error);
+      this.logger.error(
+        `Failed to create secret bundle for tenant ${tenant.id}`,
+        error as Error
+      );
       throw error;
     }
   }
@@ -69,10 +69,12 @@ export class TenantSecretVaultService {
 
   private buildBundle(tenant: TenantDoc): TenantSecretBundle {
     const microsoftSecret = tenant.microsoft?.GRAPH_CLIENT_SECRET
-      ? createSecretKey(Buffer.from(tenant.microsoft.GRAPH_CLIENT_SECRET, 'utf8'))
+      ? createSecretKey(
+          Buffer.from(tenant.microsoft.GRAPH_CLIENT_SECRET, "utf8")
+        )
       : undefined;
     const qdrantSecret = tenant.qdrant?.QDRANT_API_KEY
-      ? createSecretKey(Buffer.from(tenant.qdrant.QDRANT_API_KEY, 'utf8'))
+      ? createSecretKey(Buffer.from(tenant.qdrant.QDRANT_API_KEY, "utf8"))
       : undefined;
 
     if (!microsoftSecret && !qdrantSecret) {
