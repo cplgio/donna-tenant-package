@@ -1,6 +1,6 @@
 {
   "name": "@donna/tenancy",
-  "version": "1.2.1",
+  "version": "1.2.5",
   "description": "Donna multi-tenant utilities",
   "private": false,
   "main": "./dist/cjs/index.js",
