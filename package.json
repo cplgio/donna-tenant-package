@@ -20,6 +20,7 @@
   "files": ["dist", "prisma"],
   "scripts": {
     "build": "npm run clean && npm run build:esm && npm run build:cjs",
+    "postbuild": "node scripts/postbuild.js",
     "build:esm": "tsc -p tsconfig.build.esm.json",
     "build:cjs": "tsc -p tsconfig.build.cjs.json",
     "build:test": "tsc -p tsconfig.test.json",
