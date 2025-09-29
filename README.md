@@ -327,6 +327,7 @@ export function createWorkspacePayloadRunner<TPayload extends WorkspacePayload, 
 | --- | --- | --- |
 | `FIRESTORE_PROVIDER` | `'TENANCY_FIRESTORE'` | Token do NestJS para injetar o cliente Firestore configurado. |
 | `REDIS_PROVIDER` | `'TENANCY_REDIS'` | Token para injetar o cliente Redis, quando configurado. |
+| `TENANCY_PACKAGE_VERSION` | Semver do pacote (derivado do `package.json`). | Disponibiliza a versão compilada para expor em healthchecks/logs. |
 
 ---
 
