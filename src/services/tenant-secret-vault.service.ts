@@ -11,8 +11,9 @@ const cloneWithoutSecrets = (tenant: TenantDoc): TenantSnapshot => {
 
   let safeMicrosoft: TenantSnapshot["microsoft"];
   if (microsoft) {
+    const { GRAPH_CLIENT_SECRET: _secret, ...microsoftSafe } = microsoft;
     safeMicrosoft = Object.freeze({
-      ...microsoft,
+      ...microsoftSafe,
     }) as TenantSnapshot["microsoft"];
   }
 
