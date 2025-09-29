@@ -28,7 +28,18 @@ describe('TenantSecretVaultService', () => {
     const initialBundle = vault.captureFromTenant(baseTenant);
 
     assert.ok(initialBundle.microsoft?.clientSecret);
+    assert.equal(typeof initialBundle.microsoft?.clientSecret.export, 'function');
+    assert.strictEqual(
+      initialBundle.microsoft?.clientSecret.export().toString('utf8'),
+      baseTenant.microsoft!.GRAPH_CLIENT_SECRET,
+    );
+
     assert.ok(initialBundle.qdrant?.apiKey);
+    assert.equal(typeof initialBundle.qdrant?.apiKey.export, 'function');
+    assert.strictEqual(
+      initialBundle.qdrant?.apiKey.export().toString('utf8'),
+      baseTenant.qdrant!.QDRANT_API_KEY,
+    );
 
     const sanitizedTenant: TenantDoc = {
       ...baseTenant,
@@ -45,9 +56,14 @@ describe('TenantSecretVaultService', () => {
 
     assert.strictEqual(recaptured.microsoft?.clientSecret, initialBundle.microsoft?.clientSecret);
     assert.ok(recaptured.qdrant?.apiKey);
+    assert.strictEqual(
+      recaptured.qdrant?.apiKey.export().toString('utf8'),
+      baseTenant.qdrant!.QDRANT_API_KEY,
+    );
 
     const stored = vault.getSecrets(baseTenant.id);
     assert.strictEqual(stored?.microsoft?.clientSecret, initialBundle.microsoft?.clientSecret);
     assert.ok(stored?.qdrant?.apiKey);
+    assert.equal(typeof stored?.qdrant?.apiKey.export, 'function');
   });
 });

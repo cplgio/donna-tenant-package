@@ -1,5 +1,6 @@
 // Dependencies
 import type { PrismaClient } from '@prisma/client';
+import type { KeyObject } from 'node:crypto';
 // Types
 export interface TenantMicrosoftConfig {
   GRAPH_TENANT_ID: string;
@@ -59,9 +60,9 @@ export interface TenantContextState extends TenantContextSnapshot {
 
 export interface TenantSecretBundle {
   readonly microsoft?: {
-    readonly clientSecret: string;
+    readonly clientSecret: KeyObject;
   };
   readonly qdrant?: {
-    readonly apiKey: string;
+    readonly apiKey: KeyObject;
   };
 }
