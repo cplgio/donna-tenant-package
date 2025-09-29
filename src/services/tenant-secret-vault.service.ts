@@ -1,5 +1,6 @@
 // Dependencies
 import { Injectable, Logger } from '@nestjs/common';
+import { createSecretKey, KeyObject } from 'node:crypto';
 
 // Types
 import type {
@@ -71,12 +72,15 @@ export class TenantSecretVaultService {
     tenant: TenantDoc,
     existing: TenantSecretBundle | undefined,
   ): TenantSecretBundle {
-    const microsoftSecret = tenant.microsoft?.GRAPH_CLIENT_SECRET
+    const microsoftSource = tenant.microsoft?.GRAPH_CLIENT_SECRET
       ? tenant.microsoft.GRAPH_CLIENT_SECRET
       : existing?.microsoft?.clientSecret;
-    const qdrantSecret = tenant.qdrant?.QDRANT_API_KEY
+    const qdrantSource = tenant.qdrant?.QDRANT_API_KEY
       ? tenant.qdrant.QDRANT_API_KEY
       : existing?.qdrant?.apiKey;
+
+    const microsoftSecret = this.resolveSecret(microsoftSource);
+    const qdrantSecret = this.resolveSecret(qdrantSource);
 
     if (!microsoftSecret && !qdrantSecret) {
       return Object.freeze({}) as TenantSecretBundle;
@@ -100,5 +104,13 @@ export class TenantSecretVaultService {
     });
 
     return bundle;
+  }
+
+  private resolveSecret(secret: string | KeyObject | undefined): KeyObject | undefined {
+    if (!secret) return undefined;
+    if (typeof secret === 'string') {
+      return createSecretKey(Buffer.from(secret, 'utf8'));
+    }
+    return secret;
   }
 }

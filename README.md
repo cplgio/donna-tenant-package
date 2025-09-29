@@ -262,7 +262,7 @@ Cofre em memória que mantém secrets sensíveis fora do snapshot compartilhado.
 | Método | Assinatura | Descrição |
 | --- | --- | --- |
 | `sanitizeTenant` | `(tenant: TenantDoc) => TenantSnapshot` | Remove `GRAPH_CLIENT_SECRET` e expõe o bloco de Qdrant conforme persistido (incluindo `QDRANT_API_KEY`, quando presente). Objetos internos são congelados.
-| `captureFromTenant` | `(tenant: TenantDoc) => TenantSecretBundle` | Constrói bundle imutável com secrets Microsoft e Qdrant preservados como `string`.
+| `captureFromTenant` | `(tenant: TenantDoc) => TenantSecretBundle` | Constrói bundle imutável com secrets Microsoft e Qdrant preservados como `KeyObject`.
 | `getSecrets` | `(tenantId: string) => TenantSecretBundle \| undefined` | Recupera bundle previamente capturado.
 | `clearSecrets` | `(tenantId: string) => void` | Remove segredos do cofre.
 
@@ -309,7 +309,7 @@ export function createWorkspacePayloadRunner<TPayload extends WorkspacePayload, 
 | `TenantQdrantConfig` | Configuração do Qdrant (`QDRANT_URL`, `QDRANT_API_KEY?`). |
 | `TenantDoc` | Documento completo do tenant no Firestore (`id`, `db`, `name?`, `active?`, `microsoft?`, `qdrant?`). |
 | `TenantSnapshot` | Versão sanitizada compartilhada no contexto (sem `GRAPH_CLIENT_SECRET`). O bloco `qdrant` mantém `QDRANT_API_KEY?`. |
-| `TenantSecretBundle` | Secrets imutáveis (`microsoft?.clientSecret`, `qdrant?.apiKey`), ambos como `string`. |
+| `TenantSecretBundle` | Secrets imutáveis (`microsoft?.clientSecret`, `qdrant?.apiKey`), ambos como `KeyObject`. |
 | `ResolveInput` | Entrada aceita por `getPrismaFor`/`withTenantContext` (`tenantId?`, `userId?`, `userPhoneNumber?`). |
 | `TenantContextSource` | Origem do contexto (`'tenantId' | 'userId' | 'userPhoneNumber' | 'workspaceTenantId' | 'microsoftTenantId'`). |
 | `TenantContextMetadata` | Metadados (`source`, `identifier`). |
