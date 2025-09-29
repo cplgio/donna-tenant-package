@@ -1,6 +1,5 @@
 // Dependencies
 import { Injectable, Logger } from '@nestjs/common';
-import { createSecretKey } from 'node:crypto';
 
 // Types
 import type {
@@ -73,10 +72,10 @@ export class TenantSecretVaultService {
     existing: TenantSecretBundle | undefined,
   ): TenantSecretBundle {
     const microsoftSecret = tenant.microsoft?.GRAPH_CLIENT_SECRET
-      ? createSecretKey(Buffer.from(tenant.microsoft.GRAPH_CLIENT_SECRET, 'utf8'))
+      ? tenant.microsoft.GRAPH_CLIENT_SECRET
       : existing?.microsoft?.clientSecret;
     const qdrantSecret = tenant.qdrant?.QDRANT_API_KEY
-      ? createSecretKey(Buffer.from(tenant.qdrant.QDRANT_API_KEY, 'utf8'))
+      ? tenant.qdrant.QDRANT_API_KEY
       : existing?.qdrant?.apiKey;
 
     if (!microsoftSecret && !qdrantSecret) {
