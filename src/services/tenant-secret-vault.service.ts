@@ -46,7 +46,8 @@ export class TenantSecretVaultService {
 
   captureFromTenant(tenant: TenantDoc): TenantSecretBundle {
     try {
-      const secrets = this.buildBundle(tenant);
+      const existing = this.vault.get(tenant.id);
+      const secrets = this.buildBundle(tenant, existing);
       this.vault.set(tenant.id, secrets);
       return secrets;
     } catch (error) {
@@ -67,13 +68,16 @@ export class TenantSecretVaultService {
 
   // Utils
 
-  private buildBundle(tenant: TenantDoc): TenantSecretBundle {
+  private buildBundle(
+    tenant: TenantDoc,
+    existing: TenantSecretBundle | undefined,
+  ): TenantSecretBundle {
     const microsoftSecret = tenant.microsoft?.GRAPH_CLIENT_SECRET
       ? createSecretKey(Buffer.from(tenant.microsoft.GRAPH_CLIENT_SECRET, 'utf8'))
-      : undefined;
+      : existing?.microsoft?.clientSecret;
     const qdrantSecret = tenant.qdrant?.QDRANT_API_KEY
       ? createSecretKey(Buffer.from(tenant.qdrant.QDRANT_API_KEY, 'utf8'))
-      : undefined;
+      : existing?.qdrant?.apiKey;
 
     if (!microsoftSecret && !qdrantSecret) {
       return Object.freeze({}) as TenantSecretBundle;
