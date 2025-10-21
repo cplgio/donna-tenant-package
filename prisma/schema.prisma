@@ -297,3 +297,27 @@ enum InviteResponse {
   tentative
   organizer
 }
+
+// Await response events
+model AwaitResponseEvent {
+  id String @id @default(uuid())
+
+  eventId   String
+  eventType AwaitResponseEventType
+  messageId String                 @unique
+  userId    String?
+  user      User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  Invite    Invite?  @relation(fields: [inviteId], references: [id])
+  inviteId  String?
+
+  @@map("await_response_events")
+}
+
+enum AwaitResponseEventType {
+  invite
+  email
+  terms
+}
