@@ -37,13 +37,13 @@ model User {
   deletedAt DateTime?
 
   // Relations
-  photo               File?                @relation(fields: [fileId], references: [id])
-  subscriptions       UserSubscription[]
-  emails              Email[]
-  chatHistory         ChatHistory[]
-  Invite              Invite[]
-  InviteAttendee      InviteAttendee[]
-  awaitResponseEvents AwaitResponseEvent[]
+  photo              File?                @relation(fields: [fileId], references: [id])
+  subscriptions      UserSubscription[]
+  emails             Email[]
+  chatHistory        ChatHistory[]
+  Invite             Invite[]
+  InviteAttendee     InviteAttendee[]
+  AwaitResponseEvent AwaitResponseEvent[]
 
   @@map("users")
 }
@@ -244,9 +244,8 @@ model Invite {
 
   attendees InviteAttendee[]
 
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  AwaitResponseEvent AwaitResponseEvent[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([start, end])
   @@index([organizerUserId])
@@ -312,8 +311,6 @@ model AwaitResponseEvent {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  Invite    Invite?  @relation(fields: [inviteId], references: [id])
-  inviteId  String?
 
   @@map("await_response_events")
 }
