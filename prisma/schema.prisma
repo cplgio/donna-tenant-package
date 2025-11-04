@@ -44,6 +44,7 @@ model User {
   Invite             Invite[]
   InviteAttendee     InviteAttendee[]
   AwaitResponseEvent AwaitResponseEvent[]
+  Clipping           Clipping[]
 
   @@map("users")
 }
@@ -319,4 +320,101 @@ enum AwaitResponseEventType {
   invite
   email
   terms
+}
+
+// Clipping
+enum ClippingStatus {
+  ACTIVE
+  PAUSED
+  FINISHED
+}
+
+enum ClippingScheduleType {
+  ONCE
+  DAILY
+  WEEKLY
+  CRON
+}
+
+enum ClippingSourceType {
+  WEB
+  EMAIL
+  CALENDAR
+  DOCS
+  INTERNAL
+}
+
+enum ClippingRecipientType {
+  USER
+  EXTERNAL
+  GROUP
+}
+
+enum ClippingChannel {
+  WHATSAPP
+  EMAIL
+  TEAMS
+  WEBHOOK
+}
+
+enum ClippingRunStatus {
+  SCHEDULED
+  PROCESSING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model Clipping {
+  id          String @id @default(uuid())
+  tenantId    String
+  ownerUserId String
+
+  name        String
+  description String?
+
+  // Tema / query
+  queryText String
+  queryDsl  Json?
+
+  // Agendamento
+  scheduleType ClippingScheduleType
+  scheduleRule String
+  timezone     String
+
+  nextRunAt DateTime?
+  status    ClippingStatus @default(ACTIVE)
+
+  // Relações
+  recipients User[]
+  runs       ClippingRun[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, status, nextRunAt])
+  @@map("clippings")
+}
+
+model ClippingRun {
+  id         String   @id @default(uuid())
+  clippingId String
+  clipping   Clipping @relation(fields: [clippingId], references: [id], onDelete: Cascade)
+
+  scheduledFor DateTime
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  status ClippingRunStatus
+  error  String?
+
+  threadId         String?
+  summaryMessageId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([clippingId, scheduledFor])
+  @@index([status])
+  @@map("clipping_runs")
 }
